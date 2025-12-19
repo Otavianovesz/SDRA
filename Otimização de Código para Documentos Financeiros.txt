@@ -1,0 +1,468 @@
+﻿Arquitetura de Estado da Arte para 
+Processamento e Reconciliação de 
+Documentos Financeiros Brasileiros: 
+Uma Abordagem Universal 
+1. Introdução à Engenharia de Documentos 
+Financeiros 
+A automação do processamento de documentos financeiros no Brasil enfrenta um cenário de 
+complexidade única, caracterizado por uma dicotomia entre padrões governamentais rigorosos 
+e uma entropia significativa nos documentos bancários e municipais. A tarefa de organizar, 
+classificar e reconciliar a "Tríade Financeira"—composta pela Nota Fiscal (o fato gerador), o 
+Boleto (o instrumento de cobrança) e o Comprovante (a prova de liquidação)—não é 
+meramente um problema de scripting, mas um desafio de Engenharia de Dados e Resolução 
+de Entidades. O objetivo deste relatório é detalhar a transição de scripts lineares, baseados em 
+expressões regulares simples, para uma arquitetura de pipeline robusta, modular e "universal", 
+capaz de absorver a variabilidade inerente ao ecossistema fiscal brasileiro. 
+A abordagem atual, que utiliza bibliotecas de extração puramente em Python como pdfplumber 
+combinadas com lógica processual linear, enfrenta barreiras intransponíveis de escalabilidade e 
+manutenção à medida que o volume de documentos cresce e a diversidade de layouts 
+aumenta. Para atingir o "Estado da Arte" (SOTA), é imperativo adotar paradigmas de 
+arquitetura orientada a dados, utilizando bibliotecas de bindings em C para performance (como 
+PyMuPDF), algoritmos de fuzzy matching para reconciliação semântica e orquestradores de 
+fluxo de trabalho para garantir a integridade do processamento. Este documento serve como 
+um guia técnico exaustivo para a construção dessa nova arquitetura. 
+
+2. Paradigmas Arquiteturais: Do Script Linear ao 
+Pipeline Orientado a Dados 
+A evolução de um script de organização de arquivos para uma solução empresarial exige uma 
+mudança fundamental na topologia do software. Scripts monolíticos tendem a misturar 
+responsabilidades: a leitura do arquivo, a extração do texto, a lógica de negócios (classificação) 
+e a movimentação do arquivo ocorrem em um único bloco de execução. Esta abordagem é 
+frágil; uma falha na leitura de um PDF corrompido pode interromper todo o lote, e a lógica de 
+classificação torna-se um emaranhado de condições if/else difícil de testar e manter. 
+
+2.1 Limitações da Execução Linear 
+Em um script linear tradicional, o processamento ocorre de forma síncrona e sequencial. A 
+complexidade do código tende a crescer exponencialmente com a adição de novos layouts de 
+
+
+
+documentos. Além disso, a gestão de estado é precária: o script raramente sabe "onde parou" 
+em caso de falha, exigindo reprocessamentos caros. No contexto de documentos financeiros, 
+onde a precisão é crítica, a falta de rastreabilidade (lineage) e de isolamento de falhas 
+desqualifica o modelo de script simples para aplicações de larga escala. 
+
+2.2 A Arquitetura de Pipeline DAG (Directed Acyclic Graph) 
+O padrão ouro para processamento de dados complexos é o Pipeline DAG. Nesta arquitetura, 
+o processamento é dividido em etapas discretas e independentes, onde a saída de uma etapa 
+torna-se a entrada da próxima. Ferramentas de orquestração modernas, como Dagster ou 
+Apache Airflow, gerenciam essas dependências, permitindo retentativas automáticas, 
+paralelismo e observabilidade. 
+Para o problema da organização financeira, o pipeline deve ser estruturado nas seguintes 
+etapas lógicas: 
+
+1.​ Ingestão (Extract): Detecção de novos arquivos, validação de integridade (checksums) 
+e identificação de formato (PDF Nativo, PDF Digitalizado, Imagem, XML). 
+
+2.​ Normalização (Transform - Stage 1): Conversão de todos os inputs para uma 
+Representação Intermediária (IR) padronizada. Um PDF de boleto e um XML de NF-e 
+devem ser convertidos para objetos de dados estruturados com campos comuns (data, 
+valor, emissor). 
+
+3.​ Classificação Semântica: Uso de modelos ou heurísticas avançadas para determinar se 
+o documento é uma NF-e, um Boleto, um Comprovante ou um documento irrelevante, 
+separando também documentos de "Agendamento" de documentos de "Pagamento 
+Efetivo". 
+
+4.​ Reconciliação (The Triad Logic): A etapa de Entity Resolution onde os objetos 
+normalizados são agrupados baseados em regras de negócio (correspondência exata, 
+correspondência difusa, tolerância de datas). 
+
+5.​ Organização e Persistência (Load): Movimentação física dos arquivos para diretórios 
+estruturados ou upload para sistemas de gestão (ERPs), mantendo o vínculo lógico entre 
+os arquivos agrupados. 
+
+Característica Script Linear (Legado) Pipeline DAG (SOTA) 
+Acoplamento Alto (Lógica misturada) Baixo (Módulos independentes) 
+Falhas Catastróficas (Para o processo) Isoladas (Apenas o item falho 
+
+para) 
+Escalabilidade Vertical (Limitada por 1 núcleo) Horizontal (Paralelizável) 
+Observabilidade Logs de texto simples UI Gráfica, Rastreamento de 
+
+Linhagem 
+Manutenibilidade Difícil (Espaguete de Regex) Alta (Parsers injetáveis) 
+2.3 Padrões de Design de Código (Design Patterns) 
+Para garantir a "universalidade", o código deve utilizar padrões que permitam a extensão sem 
+modificação do núcleo (Open/Closed Principle). 
+
+●​ Factory Pattern (Fábrica): Um DocumentParserFactory analisa o cabeçalho do arquivo 
+e instancia o parser correto (e.g., BradescoBoletoParser, PrefeituraSPParser). Isso 
+elimina condicionais gigantescas no loop principal. 
+
+●​ Strategy Pattern (Estratégia): Diferentes estratégias de extração podem ser aplicadas 
+dinamicamente. Se a estratégia TextExtractionStrategy falhar (retornar vazio), o sistema 
+
+
+
+troca automaticamente para OCRExtractionStrategy sem alterar o fluxo do pipeline. 
+●​ Chain of Responsibility (Cadeia de Responsabilidade): Para a classificação, o 
+
+documento passa por uma cadeia de "Handlers". O NfeHandler tenta identificar; se falhar, 
+passa para o BoletoHandler, e assim sucessivamente. Isso permite adicionar novos tipos 
+de documentos inserindo apenas um novo elo na cadeia, sem tocar nos outros 
+classificadores. 
+
+3. A Física dos Documentos Financeiros Brasileiros 
+A universalidade exige um entendimento profundo da anatomia dos documentos. O Brasil 
+possui um dos sistemas fiscais digitais mais avançados do mundo, mas também convive com 
+legados bancários e fragmentação municipal. 
+
+3.1 Nota Fiscal Eletrônica (NF-e) - Modelo 55 
+A NF-e é o pilar da venda de produtos. Sua estrutura é regida nacionalmente pela Receita 
+Federal. 
+
+●​ Estrutura Canônica: O documento oficial é o XML assinado digitalmente. O PDF 
+(DANFE) é apenas uma representação auxiliar. 
+
+●​ Chave de Acesso: O elemento universal de identificação é a chave de 44 dígitos. Ela 
+contém, em sua composição, a UF, Data (AAMM), CNPJ do emitente, Modelo, Série e 
+Número da nota. 
+
+●​ Estratégia SOTA: A extração deve priorizar a captura desta chave. Com a chave, é 
+possível validar a autenticidade da nota via API da SEFAZ, garantindo dados muito mais 
+confiáveis do que a simples leitura do texto do PDF ("scraping"). Bibliotecas como nfelib 
+oferecem bindings Python gerados automaticamente a partir dos esquemas XSD oficiais, 
+garantindo conformidade total com a legislação. 
+
+3.2 Nota Fiscal de Serviços (NFS-e) - O Desafio da Fragmentação 
+Diferente da NF-e, a NFS-e não possui um padrão nacional único implementado plenamente. 
+Existem mais de 5.570 municípios, e muitos utilizam sistemas distintos (Ginfes, Betha, Simpliss, 
+DSf, sistemas próprios). 
+
+●​ Variabilidade: Alguns layouts colocam o "Prestador" à esquerda, outros à direita. Termos 
+variam entre "Tomador de Serviços" e "Destinatário". 
+
+●​ Normalização: Um arquitetura universal deve possuir um "Normalizador de NFS-e" que 
+mapeia os campos heterogêneos para um esquema comum (Pydantic Model), abstraindo 
+as diferenças municipais antes da etapa de reconciliação. A identificação do município 
+emissor (geralmente no cabeçalho) é o gatilho para selecionar o parser específico 
+daquela cidade ou provedor de sistema. 
+
+3.3 Boletos Bancários 
+Os boletos seguem normas da FEBRABAN (Federação Brasileira de Bancos), mas seu layout 
+visual é livre, desde que contenha os elementos obrigatórios. 
+
+●​ Código de Barras e Linha Digitável: A Linha Digitável (aquela de ~47 dígitos) é a 
+representação numérica do código de barras. Ela contém o código do banco, moeda, 
+
+
+
+valor, data de vencimento (fator de vencimento) e campos livres. 
+●​ Fator de Vencimento: A data de vencimento no código de barras é baseada em um 
+
+contador de dias a partir de 07/10/1997. A arquitetura deve implementar a lógica de 
+conversão desse fator para data gregoriana para permitir a reconciliação temporal. 
+
+●​ Validação Matemática: Apenas extrair os números via OCR/Regex é arriscado. O 
+sistema deve implementar a validação dos Dígitos Verificadores (DV) (Módulo 10 e 
+Módulo 11) presentes em cada um dos campos da linha digitável. Se o cálculo do DV não 
+bater com o número extraído, o sistema deve assumir erro de leitura e tentar reprocessar 
+ou marcar para revisão humana. 
+
+3.4 Comprovantes de Pagamento e a Armadilha do Agendamento 
+Este é o ponto crítico de falha em muitos scripts simples. Os bancos emitem comprovantes de 
+"Agendamento" que são visualmente idênticos aos de "Pagamento", diferindo apenas por uma 
+palavra-chave ou a ausência de um código de autenticação. 
+
+●​ Distinção Semântica: O "Agendamento" é uma promessa de pagamento futura; o 
+"Comprovante" é a confirmação da liquidação. 
+
+●​ Heurística de Detecção: A arquitetura deve buscar explicitamente por termos de 
+negação ("Agendamento", "Previsto", "Aguardando processamento"). A presença de um 
+Hash de Autenticação (sequência alfanumérica longa, geralmente no rodapé) é o 
+indicador mais forte de um pagamento efetivado. O sistema deve ser capaz de distinguir 
+entre a "Data da Transação" (quando o usuário operou o home banking) e a "Data do 
+Pagamento" (quando o dinheiro efetivamente saiu da conta), pois o agendamento pode 
+ser feito hoje para pagar um boleto que vence semana que vem. 
+
+4. Tecnologias de Extração: O Motor da 
+Universalidade 
+A escolha das bibliotecas de extração define o teto de performance e a capacidade de lidar 
+com casos de borda. O uso atual de pdfplumber é funcional, mas não é "Estado da Arte" em 
+termos de eficiência computacional para grandes volumes. 
+
+4.1 Extração de PDF: A Supremacia do PyMuPDF 
+O pdfplumber é construído sobre o pdfminer.six, uma ferramenta escrita em Python puro. 
+Embora precisa, ela sofre com overhead de memória e lentidão (CPU-bound) ao processar a 
+árvore de objetos do PDF. A recomendação SOTA é o uso do PyMuPDF (conhecido como 
+fitz). 
+
+●​ Performance: Baseado na biblioteca MuPDF (escrita em C), o PyMuPDF é 
+significativamente mais rápido (frequentemente 10x a 20x mais veloz que pdfminer ou 
+pypdf) na extração de texto e renderização de páginas. 
+
+●​ Capacidades Avançadas: 
+○​ Extração Estruturada: O método page.get_text("dict") retorna não apenas o texto, 
+
+mas as coordenadas (bbox), tamanho da fonte e cor. Isso permite criar lógicas 
+como "O CNPJ deve estar no topo direito (coordenadas x,y > treshold)" ou "Texto 
+muito pequeno no rodapé é irrelevante". 
+
+○​ Detecção de PDFs Digitalizados: Uma verificação simples da quantidade de texto 
+
+
+
+extraído permite classificar o arquivo como "Nativo" ou "Imagem/Scanned". Se for 
+imagem, o PyMuPDF pode rasterizar a página para enviar a um motor de OCR, 
+atuando como um hub central de processamento. 
+
+4.2 OCR e Processamento de Imagens 
+Para garantir universalidade, o sistema não pode falhar ao receber um PDF que é apenas uma 
+foto de um documento. 
+
+●​ Tesseract 5: Atualmente o motor de OCR open-source mais robusto. Deve ser 
+configurado com o idioma português (por) para garantir o reconhecimento correto de 
+acentuação e cedilhas. 
+
+●​ Pré-processamento com OpenCV: Antes de passar a imagem para o OCR, é vital 
+aplicar filtros: 
+
+○​ Binarização: Converter para preto e branco para remover ruídos de fundo (comum 
+em papéis de segurança de boletos). 
+
+○​ Deskewing (Correção de Inclinação): Se o documento foi escaneado torto, o 
+OCR falhará. Algoritmos de detecção de linhas (Hough Transform) podem calcular 
+o ângulo de inclinação e rotacionar a imagem para a posição ortogonal perfeita. 
+
+●​ PaddleOCR: Uma alternativa emergente ao Tesseract, baseada em Deep Learning, que 
+demonstra performance superior na detecção de tabelas e números, sendo 
+particularmente útil para extrair dados tabulares de notas fiscais digitalizadas. 
+
+4.3 Casos de Borda e Segurança 
+●​ PDFs Protegidos por Senha: Documentos bancários frequentemente vêm encriptados. 
+
+Bibliotecas como pikepdf (baseada em QPDF) e pypdf oferecem mecanismos para 
+detectar a encriptação. Para senhas de "proprietário" (que restringem edição mas 
+permitem leitura), o pikepdf muitas vezes consegue remover a restrição e salvar uma 
+versão descriptografada para processamento. Para senhas de "usuário" (que bloqueiam 
+a abertura), o sistema deve encaminhar o arquivo para uma fila de exceção. 
+
+●​ Vetores como Texto: Alguns geradores de PDF convertem fontes em curvas vetoriais 
+para garantir a fidelidade de impressão. Para um extrator de texto comum, a página 
+parece vazia. A arquitetura deve detectar "Páginas com muitos vetores e zero texto" e 
+encaminhá-las para o pipeline de OCR (rasterização). 
+
+## 5. Lógica de Agrupamento: A Tríade e a Resolução de Entidades 
+A solicitação central é a lógica de agrupamento da "Tríade" (Nota Fiscal + Boleto + 
+Comprovante). Este é um problema clássico de Entity Resolution e Link Prediction em grafos. 
+
+5.1 O Modelo de Grafo para Reconciliação 
+A abordagem linear tenta combinar arquivos par-a-par em loops aninhados (for doc in docs...). 
+Isso é ineficiente (O(n^2)) e falha em casos complexos (ex: um boleto pagando três notas). A 
+abordagem SOTA utiliza Teoria dos Grafos. 
+
+1.​ Cada documento identificado torna-se um Nó no grafo. 
+2.​ As regras de correspondência criam Arestas entre os nós. 
+3.​ O agrupamento final é obtido calculando os Componentes Conexos (Connected 
+
+Components) do grafo. 
+Se um Boleto paga três Notas Fiscais, o grafo terá um nó central (Boleto) conectado a três nós 
+
+
+
+(NFs) e um nó (Comprovante). O algoritmo de componentes conexos identificará este grupo de 
+5 documentos como uma única "Transação" automaticamente, sem a necessidade de lógica 
+condicional complexa. 
+
+5.2 Algoritmos de Correspondência (Matching) 
+Para criar as arestas do grafo, utilizamos diferentes níveis de confiança: 
+
+5.2.1 Correspondência Determinística (Hard Match) 
+
+●​ Código de Barras: Se o Boleto possui a Linha Digitável X e o Comprovante lista a 
+mesma Linha Digitável X (ou seu código de barras correspondente), a conexão é certa. 
+
+●​ Chave de Acesso: Se a NF-e possui a chave Y e o Boleto (raramente) cita essa chave 
+no campo "Instruções", a conexão é certa. 
+
+5.2.2 Correspondência Difusa e Tolerante (Fuzzy Match) 
+
+Muitas vezes, não há identificadores únicos compartilhados. Precisamos triangular dados: 
+Valor, Data e Entidade. 
+
+●​ Tolerância de Valor (Drift): O valor do boleto pode ser diferente do valor da NF devido a 
+multas, juros ou descontos. O algoritmo de matching deve aceitar uma tolerância delta 
+(ex: abs(Valor_NF - Valor_Boleto) <= 1% ou um valor fixo). 
+
+●​ Tolerância de Data: O pagamento (Comprovante) ocorre geralmente após a emissão da 
+NF e próximo ao vencimento do Boleto. A regra deve ser: Data_Emissao_NF <= 
+Data_Pagamento <= Data_Vencimento_Boleto + X dias. 
+
+●​ Fuzzy Matching de Nomes: Os nomes das empresas raramente são idênticos nos 
+sistemas. "Amazon Serviços de Varejo do Brasil Ltda." na NF pode aparecer como 
+"Amazon Brasil" no extrato. 
+
+○​ Tecnologia: A biblioteca RapidFuzz é a escolha SOTA, substituindo a antiga 
+FuzzyWuzzy. Ela é otimizada em C++ e oferece algoritmos como token_set_ratio, 
+que ignora a ordem das palavras e palavras comuns (stopwords), ideal para 
+comparar razões sociais. 
+
+○​ Score: Se RapidFuzz.token_set_ratio(Nome_NF, Nome_Boleto) > 85, cria-se uma 
+aresta de "Possível Correspondência" no grafo. 
+
+5.3 Implementação em Python 
+A biblioteca NetworkX é ideal para gerenciar essa lógica. 
+import networkx as nx​
+from rapidfuzz import fuzz​
+​
+G = nx.Graph()​
+# Adiciona nós​
+for doc in documents:​
+    G.add_node(doc.id, type=doc.type, data=doc)​
+​
+# Cria arestas baseadas em regras​
+for doc_a in documents:​
+
+
+
+    for doc_b in documents:​
+        if doc_a == doc_b: continue​
+        ​
+        # Regra 1: Código de Barras (Determinístico)​
+        if match_barcode(doc_a, doc_b):​
+            G.add_edge(doc_a.id, doc_b.id, weight=1.0)​
+            ​
+        # Regra 2: Fuzzy Name + Valor (Probabilístico)​
+        elif match_fuzzy(doc_a, doc_b):​
+             G.add_edge(doc_a.id, doc_b.id, weight=0.8)​
+​
+# Extrai os grupos (Tríades)​
+groups = list(nx.connected_components(G))​
+ 
+Esta abordagem resolve elegantemente os casos de "Muitos-para-Muitos" e isola documentos 
+órfãos (nós sem arestas) para revisão manual. 
+
+6. Stack Tecnológico Recomendado 
+Para implementar esta arquitetura com garantia de performance e manutenibilidade, 
+recomenda-se a seguinte pilha tecnológica (Stack): 
+Componente Ferramenta Recomendada Justificativa SOTA 
+Linguagem Python 3.10+ Tipagem estática (typing), 
+
+match case. 
+Extração PDF PyMuPDF (fitz) Velocidade superior, 
+
+renderização, metadados 
+detalhados. 
+
+OCR Tesseract 5 + pytesseract Padrão da indústria 
+open-source, alta acurácia. 
+
+Pré-processamento OpenCV Limpeza de imagem essencial 
+para OCR (binarização, 
+deskew). 
+
+Estrutura de Dados Pydantic Validação de dados rigorosa, 
+parsing automático de tipos. 
+
+Matching RapidFuzz Algoritmos de distância de 
+edição (Levenshtein) 
+otimizados. 
+
+Lógica de Grafo NetworkX Resolução de agrupamentos 
+complexos e componentes 
+conexos. 
+
+Parsers Brasil nfelib, validate_docbr Bibliotecas específicas para 
+validação de CPF/CNPJ e 
+XMLs fiscais. 
+
+Orquestração Dagster Gerenciamento de pipeline 
+orientado a ativos de dados e 
+tipagem. 
+
+
+
+6.1 Detalhes de Implementação dos Parsers 
+A estrutura do projeto deve refletir a separação de responsabilidades. Recomenda-se a 
+seguinte organização de diretórios, seguindo as melhores práticas de empacotamento Python : 
+/src /extractors /pdf_native.py (PyMuPDF logic) /pdf_ocr.py (Tesseract/OpenCV logic) /parsers 
+/factory.py (Decide qual parser usar) /nfe_parser.py (Lógica XML/DANFE) /boleto_parser.py 
+(Regex de Linha Digitável) /receipt_parser.py(Lógica Agendamento vs Pagamento) /models 
+/schemas.py (Pydantic models: FinancialDocument) /reconciliation /graph_engine.py (NetworkX 
+logic) /fuzzy_logic.py (RapidFuzz logic) /pipeline /assets.py (Definições do Dagster) 
+
+6.2 Previsão de Casos de Borda (Robustez) 
+A arquitetura deve incluir "Guardrails" (Grades de Proteção) tecnológicas: 
+
+1.​ Validação de Checksum: Nunca confiar apenas no OCR de números. Recalcular os 
+dígitos verificadores de cada boleto lido. Se falhar, descartar a leitura e tentar outro 
+método de binarização da imagem. 
+
+2.​ Detecção de Encoding: PDFs antigos podem usar encodings de texto não-padrão (ex: 
+CP1252 em vez de UTF-8). Utilizar bibliotecas como chardet ou as ferramentas internas 
+do PyMuPDF para normalizar o texto para UTF-8 antes de qualquer processamento 
+regex. 
+
+3.​ Sanitização de Strings: Remover caracteres invisíveis (Zero Width Space), tabulações e 
+quebras de linha excessivas que frequentemente quebram regexes. 
+
+7. Conclusão 
+A transição de um script simples para uma arquitetura "Estado da Arte" de organização 
+financeira exige a adoção de práticas de engenharia de software maduras. A substituição do 
+processamento linear por um pipeline DAG orquestrado, combinada com a troca de bibliotecas 
+puramente Python (pdfplumber) por soluções de alta performance (PyMuPDF, RapidFuzz), 
+fornece a base para a escalabilidade. 
+Contudo, a verdadeira inteligência reside na camada de reconciliação. Ao modelar a relação 
+entre Notas Fiscais, Boletos e Comprovantes como um problema de grafos e aplicar 
+correspondência difusa e validações matemáticas rigorosas (dígitos verificadores), o sistema 
+transcende a simples "organização de arquivos" e se torna uma ferramenta de auditoria 
+automática. Esta abordagem não apenas garante a universalidade ao tratar todos os inputs 
+como dados estruturados, mas também previne erros financeiros críticos, como a confusão 
+entre agendamentos e pagamentos efetivos, oferecendo uma solução robusta para o complexo 
+cenário fiscal brasileiro. 
+
+Referências citadas 
+
+1. Brazil NF-e process overview - Finance | Dynamics 365 | Microsoft Learn, 
+https://learn.microsoft.com/en-us/dynamics365/finance/localizations/brazil/latam-bra-nf-e-proces
+s 2. Electronic invoicing in Brazil (NF-e, NFS-e, NFCom, and CT-e) | EDICOM Global, 
+https://edicomgroup.com/blog/electronic-invoicing-brazil 3. Building an ETL Pipeline in Python - 
+2025 - Integrate.io, https://www.integrate.io/blog/building-an-etl-pipeline-in-python/ 4. Designing 
+an Effective ETL Pipeline: A Comprehensive Guide | by Mohammad Aftab, 
+
+
+
+https://medium.com/@aftab4092/designing-an-effective-etl-pipeline-a-comprehensive-guide-290
+056e5099b 5. 10 Python ETL Tools That'll Actually Matter in 2025 - Airbyte, 
+https://airbyte.com/top-etl-tools-for-sources/python-etl-tools 6. Python ETL Tools: Top 9 
+Frameworks & Best Use Cases - Panoply Blog, 
+https://blog.panoply.io/top-9-python-etl-tools-and-when-to-use-them 7. Data Pipeline Design 
+Patterns - #2. Coding patterns in Python - Start Data Engineering, 
+https://www.startdataengineering.com/post/code-patterns/ 8. Design Patterns in Python: Chain 
+of Responsibility | by Amir Lavasani | Medium, 
+https://medium.com/@amirm.lavasani/design-patterns-in-python-chain-of-responsibility-cc22bb2
+41b41 9. Chain of Responsibility - Refactoring.Guru, 
+https://refactoring.guru/design-patterns/chain-of-responsibility 10. Engenere/BrazilFiscalReport: 
+Python library for generating Brazilian auxiliary fiscal documents in PDF from XML documents. - 
+GitHub, https://github.com/Engenere/BrazilFiscalReport 11. nfelib - bindings Python para e ler e 
+gerir XML de NF-e, NFS-e nacional, CT-e, MDF-e, BP-e - GitHub, 
+https://github.com/akretion/nfelib 12. Brazil - D24 Docs, 
+https://docs.d24.com/cashouts/countries-validations/american-countries/brazil 13. Qual a 
+diferença do agendamento para o pagamento? - YouTube, 
+https://www.youtube.com/watch?v=QkwFu-Ij2gw 14. Qual a diferença entre comprovante de 
+pagamento e comprovante de agendamento? | STARKBANK WIKI, 
+https://starkbank.com/help/pagamentos-e-transferencias/comprovantes/qual-a-diferenca-entre-c
+omprovante-de-pagamento-e-comprovante-de-agendamento 15. Features Comparison - 
+PyMuPDF documentation, https://pymupdf.readthedocs.io/en/latest/about.html 16. 
+py-pdf/benchmarks: Benchmarking PDF libraries - GitHub, 
+https://github.com/py-pdf/benchmarks 17. Tutorial - PyMuPDF documentation, 
+https://pymupdf.readthedocs.io/en/latest/tutorial.html 18. OCR - Optical Character Recognition - 
+PyMuPDF documentation, https://pymupdf.readthedocs.io/en/latest/recipes-ocr.html 19. 
+Extracting Data from PDFs | Challenges in RAG/LLM Applications - Unstract, 
+https://unstract.com/blog/pdf-hell-and-practical-rag-applications/ 20. Python Data Extraction 
+from an Encrypted PDF - Stack Overflow, 
+https://stackoverflow.com/questions/58226546/python-data-extraction-from-an-encrypted-pdf 
+21. How to unlock a "secured" (read-protected) PDF in Python? - Stack Overflow, 
+https://stackoverflow.com/questions/28192977/how-to-unlock-a-secured-read-protected-pdf-in-p
+ython 22. Entity Resolution Using Fuzzy Matching and Vector Embeddings - YouTube, 
+https://www.youtube.com/watch?v=CbgO5KuCNic 23. python - Better fuzzy matching 
+performance? - Stack Overflow, 
+https://stackoverflow.com/questions/21408760/better-fuzzy-matching-performance 24. 
+rapidfuzz/RapidFuzz: Rapid fuzzy string matching in Python using various string metrics - 
+GitHub, https://github.com/rapidfuzz/RapidFuzz 25. Fuzzy String Matching in Python Tutorial - 
+DataCamp, https://www.datacamp.com/tutorial/fuzzy-string-python 26. Best Practices in 
+Structuring Python Projects - Dagster, https://dagster.io/blog/python-project-best-practices 27. 
+Structuring Your Project - The Hitchhiker's Guide to Python - Read the Docs, 
+https://python-docs.readthedocs.io/en/latest/writing/structure.html 28. How Can You Structure 
+Your Python Script?, https://realpython.com/python-script-structure/

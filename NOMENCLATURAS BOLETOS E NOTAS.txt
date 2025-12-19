@@ -1,0 +1,69 @@
+NOMENCLATURAS BOLETOS E NOTAS
+
+QUANDO TEM UMA NOTA E UM BOLETO:
+
+Padrão de descrição para ambos os documentos:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_TIPO DO DOCUMENTO_Nº DA NOTA
+
+Exemplo:
+23.03.2022_VG_CB AGRICOLA_100,00_NFE_220 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_100,00_BOLETO_220 (Nomenclatura do boleto)
+
+==================================================================================================
+
+QUANDO TEM DUAS OU MAIS NOTAS E UM BOLETO:
+
+Padrão de descrição para as notas:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_VLR NF_TIPO DO DOCUMENTO_Nº DA NOTA
+
+Padrão de descrição para o boleto:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_TIPO DO DOCUMENTO_Nº DAS NOTAS
+
+Exemplo:
+23.03.2022_VG_CB AGRICOLA_300,00_100,00_NFE_220 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_300,00_200,00_NFSE_550 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_300,00_BOLETO_220_550 (Nomenclatura do boleto)
+
+==================================================================================================
+
+QUANDO TEM UMA NOTA E DOIS OU MAIS BOLETOS:
+
+Padrão de descrição para a nota:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_VLR NF_PARCELAS_TIPO DO DOCUMENTO_Nº DA NOTA
+
+Padrão de descrição para os boletos
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_PARCELAS_TIPO DO DOCUMENTO_Nº DAS NOTAS
+
+Exemplo de uma nota parcelado em 3x:
+23.03.2022_VG_CB AGRICOLA_100,00_300,00_PARC_1-3_NFE_220 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_100,00_PARC_1-3_BOLETO_220 (Nomenclatura do boleto)
+
+23.04.2022_VG_CB AGRICOLA_100,00_300,00_PARC_2-3_NFE_220 (Nomenclatura da nota fiscal)
+23.04.2022_VG_CB AGRICOLA_100,00_PARC_2-3_BOLETO_220 (Nomenclatura do boleto)
+
+23.05.2022_VG_CB AGRICOLA_100,00_300,00_PARC_3-3_NFE_220 (Nomenclatura da nota fiscal)
+23.05.2022_VG_CB AGRICOLA_100,00_PARC_3-3_BOLETO_220 (Nomenclatura do boleto)
+
+==================================================================================================
+
+QUANDO TEM DUAS OU MAIS NOTA E DOIS OU MAIS BOLETOS:
+
+Padrão de descrição para a nota:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_VLR NF_PARCELAS_TIPO DO DOCUMENTO_Nº DA NOTA
+
+Padrão de descrição para os boletos:
+DATA VENC_VG OU MV_FORNECEDOR_VLR BOLETO_PARCELAS_TIPO DO DOCUMENTO_Nº DAS NOTAS
+
+Exemplo de duas notas parcelado em 3x:
+23.03.2022_VG_CB AGRICOLA_100,00_150,00_PARC_1-3_NFE_220 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_100,00_150,00_PARC_1-3_NFSE_550 (Nomenclatura da nota fiscal)
+23.03.2022_VG_CB AGRICOLA_100,00_PARC_1-3_BOLETO_220 (Nomenclatura do boleto)
+
+23.04.2022_VG_CB AGRICOLA_100,00_150,00_PARC_2-3_NFE_220 (Nomenclatura da nota fiscal)
+23.04.2022_VG_CB AGRICOLA_100,00_150,00_PARC_2-3_NFSE_550 (Nomenclatura da nota fiscal)
+23.04.2022_VG_CB AGRICOLA_100,00_PARC_2-3_BOLETO_220 (Nomenclatura do boleto)
+
+23.05.2022_VG_CB AGRICOLA_100,00_150,00_PARC_3-3_NFE_220 (Nomenclatura da nota fiscal)
+23.05.2022_VG_CB AGRICOLA_100,00_150,00_PARC_3-3_NFSE_550 (Nomenclatura da nota fiscal)
+23.05.2022_VG_CB AGRICOLA_100,00_PARC_3-3_BOLETO_220 (Nomenclatura do boleto)
+

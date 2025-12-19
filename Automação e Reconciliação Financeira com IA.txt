@@ -1,0 +1,550 @@
+﻿SRDA-Rural: Especificação Técnica 
+Avançada e Arquitetura para 
+Reconciliação Financeira Autônoma 
+Baseada em SLM 
+1. Arquitetura Executiva e Filosofia de Design do 
+Sistema 
+A concepção do Sistema de Reconciliação Documental e Automação Rural (SRDA-Rural) 
+transcende a engenharia de software convencional ao propor uma solução para um dos 
+problemas mais persistentes na gestão financeira descentralizada: a entropia documental. O 
+projeto visa atender às demandas específicas das entidades financeiras identificadas como 
+Vagner (VG) e Marcelli (MV), operando sob um paradigma de restrição de hardware que 
+inviabiliza abordagens contemporâneas baseadas em nuvem ou processamento massivo em 
+GPU. A arquitetura proposta define um motor de inteligência local, autônomo e resiliente, 
+capaz de ingerir fluxos caóticos de documentos fiscais e bancários — especificamente Notas 
+Fiscais Eletrônicas (NF-e/NFS-e), Boletos Bancários e Comprovantes de Pagamento — e 
+impor uma ordem lógica rigorosa através de algoritmos determinísticos e probabilísticos. 
+A premissa fundamental que rege este desenvolvimento é a soberania dos dados e a 
+eficiência computacional. Diferente de sistemas que delegam a inteligência para APIs 
+externas, o SRDA-Rural internaliza toda a carga cognitiva. Isso exige a implementação de 
+modelos de linguagem pequenos (SLMs - Small Language Models) e técnicas de TinyML 
+(Machine Learning para dispositivos restritos) que operam diretamente na CPU de estações 
+de trabalho intermediárias. O objetivo não é apenas digitalizar, mas criar um "analista 
+financeiro sintético" que compreenda a semântica dos documentos, identifique relações de 
+causalidade financeira (dívida versus pagamento) e execute a reconciliação com precisão 
+absoluta, tudo isso enquanto mantém a responsividade da interface do usuário em um 
+ambiente desktop offline. 
+1.1. O Paradigma Monolítico Modular 
+Dadas as restrições operacionais — execução local, sem dependência de internet e em 
+hardware modesto —, a arquitetura de microsserviços é descartada em favor de um padrão 
+Monolítico Modular. Neste modelo, a aplicação reside em um único processo executável, 
+mas seus componentes internos são estritamente desacoplados, comunicando-se através de 
+interfaces de dados tipadas. Isso elimina a latência de rede e o overhead de orquestração de 
+contêineres, maximizando o uso da memória RAM e dos ciclos de CPU disponíveis para o 
+processamento core: a análise de documentos.1 
+
+
+
+A estrutura do sistema é estratificada em quatro camadas funcionais herméticas, desenhadas 
+para garantir a manutenibilidade e a escalabilidade vertical: 
+
+1.​ Camada de Ingestão e Percepção (The Scanner): Atua como os "olhos" do sistema, 
+responsável pela varredura de diretórios, cálculo de integridade (hashing), 
+segmentação visual de arquivos PDF combinados e extração de texto bruto, seja de 
+camadas nativas ou via OCR (Reconhecimento Óptico de Caracteres). 
+
+2.​ Camada de Extração Cognitiva (The Parser): Constitui o centro linguístico, onde 
+texto não estruturado é convertido em metadados estruturados. Utiliza uma abordagem 
+híbrida que combina a precisão determinística de Expressões Regulares (Regex) com a 
+flexibilidade semântica de modelos NER (Named Entity Recognition) leves, como o 
+GLiNER, para identificar entidades complexas em layouts variados. 
+
+3.​ Camada de Lógica e Reconciliação (The Matcher): O núcleo matemático do sistema. 
+Esta camada modela o problema financeiro como um grafo de transações e utiliza 
+algoritmos de otimização combinatória (Subset Sum) para resolver relações N-para-M 
+entre notas e pagamentos, aplicando as regras de negócio das entidades VG e MV. 
+
+4.​ Camada de Interação e Persistência (The Dashboard): A interface com o usuário, 
+construída sobre bibliotecas nativas leves (Tkinter), apoiada por um banco de dados 
+relacional embarcado (SQLite) que gerencia o estado da aplicação e garante a 
+integridade transacional dos dados reconciliados. 
+
+1.2. Otimização para Hardware Intermediário (CPU-First Strategy) 
+O requisito de operar em "computadores que não são da NASA" impõe uma disciplina 
+rigorosa no gerenciamento de recursos. A arquitetura rejeita o carregamento especulativo de 
+dados em memória. Em vez disso, adota-se o uso extensivo de geradores e iteradores 
+Python, permitindo que o sistema processe milhares de documentos com uma pegada de 
+memória constante e baixa. 
+A estratégia de inteligência artificial é recalibrada para o ecossistema de CPU. Modelos de 
+Deep Learning padrão (FP32) são substituídos por versões quantizadas (INT8), que reduzem 
+o consumo de memória em aproximadamente 75% e aceleram a inferência através de 
+instruções vetorizadas (AVX2/AVX-512) presentes em processadores modernos, porém 
+comuns.2 Operações matemáticas pesadas, essenciais para a reconciliação de valores (como 
+a verificação de todas as combinações possíveis de notas para um pagamento), são 
+delegadas a rotinas de baixo nível em C através da biblioteca NumPy, contornando as 
+limitações de velocidade do interpretador Python. 
+Além disso, o banco de dados SQLite não atua apenas como repositório passivo, mas como 
+uma máquina de estados persistente. Cada etapa do processamento — da extração à 
+validação — é "comitada" atomicamente. Isso confere ao sistema uma resiliência de 
+"crash-only software": se o computador travar ou for desligado abruptamente, o sistema 
+pode ser reiniciado e retomar o trabalho exatamente de onde parou, sem perda de dados ou 
+necessidade de reprocessamento custoso.3 
+
+2. Engenharia Forense Documental e Análise de 
+
+
+
+Domínio 
+A eficácia do SRDA-Rural depende intrinsecamente de sua capacidade de decodificar a 
+"física" dos documentos financeiros brasileiros. Diferente de processadores de texto 
+genéricos, este sistema deve possuir um conhecimento profundo da taxonomia fiscal e 
+bancária nacional, distinguindo nuances que escapariam a uma análise superficial. 
+2.1. Taxonomia da Tríade Financeira 
+O sistema opera sobre o conceito de "Tríade Financeira", onde uma transação completa é 
+composta por três documentos interligados transitivamente: o Fato Gerador (Nota), o 
+Instrumento de Cobrança (Boleto) e a Prova de Liquidação (Comprovante). 
+2.1.1. O Fato Gerador: Nota Fiscal (NF-e e NFS-e) 
+
+A Nota Fiscal Eletrônica (Modelo 55) é o documento mais padronizado, regido nacionalmente. 
+Sua representação visual, o DANFE, apresenta uma densidade informacional alta, estruturada 
+em grades rígidas. O sistema deve priorizar a extração da Chave de Acesso, uma sequência 
+numérica de 44 dígitos, que serve como identificador universal e inequívoco.5 
+
+No entanto, a complexidade reside nas "entrelinhas". Uma análise forense dos documentos 
+amostrais revela a presença crítica do bloco "Fatura/Duplicatas".5 Este campo não é mero 
+texto decorativo; ele contém a programação financeira da dívida (ex: "001 13/12/2025 
+3.300,00"). A arquitetura exige que o parser extraia essa tabela estruturada para criar "slots 
+de expectativa" no banco de dados. Sem essa extração, o sistema seria incapaz de prever 
+parcelamentos ou validar se um boleto corresponde à totalidade ou a uma fração da nota. 
+Para as Notas Fiscais de Serviço (NFS-e), a situação é de alta entropia. Cada município (ex: 
+Nova Mutum 5) adota um layout distinto. Aqui, a extração baseada em coordenadas fixas é 
+falha. O sistema deve implementar uma Análise Espacial Relativa, localizando âncoras 
+semânticas como "Valor Líquido" ou "Total da Nota" e varrendo a vizinhança geométrica 
+(direita ou abaixo) em busca de padrões monetários, adaptando-se dinamicamente à 
+variabilidade do layout. 
+2.1.2. O Instrumento de Cobrança: Boleto Bancário 
+
+O Boleto é o elo entre a dívida e o pagamento. Seguindo as normas da Febraban, ele oferece 
+dois identificadores robustos: a Linha Digitável e o Código de Barras (Intercalado 2 de 5).6 A 
+extração destes campos não pode ser puramente óptica; ela deve ser validada 
+matematicamente. O sistema deve recalcular os Dígitos Verificadores (Módulo 10 e Módulo 11) 
+de cada campo extraído. Se a matemática não bater, o OCR falhou, e o documento deve ser 
+marcado para revisão ou reprocessamento com filtros de imagem mais agressivos.7 
+
+Um ponto de atenção crucial é a distinção visual. Boletos são caracterizados por uma alta 
+densidade de barras verticais (separadores de campos) no topo e a presença do código de 
+barras no rodapé. Essas características visuais são utilizadas pelo módulo de segmentação 
+para distinguir um boleto de uma nota fiscal dentro de um arquivo PDF combinado. 
+
+
+
+2.1.3. A Prova de Liquidação: Comprovante de Pagamento 
+
+Este é o documento mais crítico e problemático. O Banco do Brasil, especificamente, emite 
+comprovantes com layouts legados (SISBB) ou em formato de extrato térmico, que desafiam 
+os motores de OCR tradicionais.5 
+
+O sistema deve ser capaz de distinguir, com precisão binária, entre um Comprovante de 
+Agendamento e um Comprovante de Pagamento. Visualmente, eles podem ser idênticos. A 
+diferenciação reside em palavras-chave negativas. O parser deve varrer o documento em 
+busca de termos como "AGENDAMENTO", "PREVISTO" ou "DATA PROGRAMADA".10 A 
+presença destes termos deve classificar o documento como "Provisório", impedindo que ele 
+seja utilizado para dar baixa definitiva em uma obrigação financeira no banco de dados local. 
+Para comprovantes do Banco do Brasil, a "Autenticação SISBB" — uma sequência 
+alfanumérica complexa (ex: 9.6A6.CE6...) — é o identificador definitivo de sucesso da 
+transação.12 O sistema utiliza padrões Regex específicos para capturar essa sequência, que 
+serve como uma "impressão digital" única do pagamento. 
+2.2. O Desafio dos Arquivos Combinados e Segmentação Lógica 
+A prática comum de digitalizar múltiplos documentos em um único fluxo de PDF (Arquivos 
+Combinados de Algumas Possibilidades.pdf 5) introduz um desafio estrutural. O sistema de 
+arquivos não permite nomear um arquivo como NOTA_E_BOLETO.pdf se o objetivo é a 
+atomicidade. Portanto, o sistema deve implementar um Segmentador Inteligente. 
+Este módulo analisa o PDF página por página antes de qualquer extração de dados. Ele utiliza 
+heurísticas visuais (densidade de texto, presença de códigos de barras, palavras-chave de 
+cabeçalho) para detectar transições de contexto. Se a Página 1 é classificada como "DANFE" 
+e a Página 2 como "Ficha de Compensação", o sistema identifica uma fronteira semântica. O 
+PDF é então virtualmente ou fisicamente "explodido" em arquivos temporários independentes, 
+garantindo que cada artefato documental entre no pipeline de reconciliação como uma 
+entidade discreta e única.3 
+
+3. O Motor Cognitivo: Implementação de SLM e 
+TinyML 
+A exigência de "Inteligência Artificial Local" em hardware intermediário desqualifica o uso de 
+LLMs massivos (como GPT-4 ou Llama-3-70B). A solução arquitetural reside no uso de SLMs 
+(Small Language Models) e técnicas de TinyML, focadas na eficiência. 
+3.1. Ingestão de Alta Performance com PyMuPDF 
+Para a camada de ingestão, a biblioteca PyMuPDF (fitz) é a escolha técnica mandatória. 
+Benchmarks indicam que ela é ordens de grandeza mais rápida (até 30x) na extração de texto 
+e renderização de imagens do que alternativas puramente Python como pdfplumber ou 
+PyPDF2.14 Essa velocidade é crítica quando o sistema precisa reprocessar históricos de 
+
+
+
+milhares de documentos. 
+A extração não se limita ao texto plano. O sistema utiliza o método get_text("dict") para 
+recuperar a estrutura hierárquica da página, incluindo coordenadas (Bounding Boxes) de 
+cada bloco de texto. Isso permite uma "leitura espacial": o sistema sabe que um CNPJ no 
+canto superior esquerdo provavelmente pertence ao emissor, enquanto um no centro 
+provavelmente pertence ao destinatário, aumentando a precisão da extração sem a 
+necessidade de modelos de IA pesados para compreensão de layout. 
+3.2. Extração Híbrida: Determinismo e Probabilidade 
+A extração de dados opera em uma arquitetura de três camadas, desenhada para maximizar 
+a precisão e minimizar o custo computacional: 
+
+1.​ Camada Determinística (Regex Contextual): Para dados padronizados como datas, 
+valores monetários e chaves de acesso, o uso de IA é ineficiente. O sistema emprega 
+Expressões Regulares compiladas e otimizadas. Para valores monetários brasileiros, o 
+padrão r'(?:R\$|Total|Valor)\s?[:\.]?\s?([\d\.]+,\d{2})' é utilizado, lidando robustamente 
+com a inversão de pontos e vírgulas típica do formato BRL.5 
+
+2.​ Camada de Reconhecimento de Entidades (NER com GLiNER): Para identificar o 
+"Fornecedor" em layouts não padronizados, onde o nome pode estar oculto em meio a 
+ruído visual, o sistema utiliza o GLiNER (Generalist Lightweight NER).16 Diferente de 
+modelos BERT tradicionais que requerem treinamento específico para novas etiquetas, 
+o GLiNER é um modelo zero-shot eficiente em CPU. Ele permite que o sistema pergunte 
+ao modelo "Quem é o Fornecedor?" ou "Qual o Banco?", e o modelo infere a resposta 
+baseada no contexto semântico, mesmo em documentos nunca vistos antes. Com cerca 
+de 300MB, este modelo roda localmente com latência aceitável. 
+
+3.​ Camada de OCR de Fallback (Tesseract Otimizado): Se a extração nativa falhar (PDF 
+escaneado), o sistema invoca o Tesseract 5. A otimização para hardware modesto 
+envolve o pré-processamento da imagem com OpenCV (binarização adaptativa para 
+remover fundos de segurança) e a configuração do Tesseract com parâmetros --oem 1 
+(rede neural LSTM) e --psm ajustado à geometria da página (ex: bloco único de texto 
+vs. layout complexo).17 
+
+3.3. Lógica de Classificação de Entidades (Vagner vs. Marcelli) 
+A distinção entre as entidades financeiras Vagner (VG) e Marcelli (MV) é uma regra de 
+negócio crítica que deve ser tratada com lógica determinística prioritária. 
+
+●​ Correspondência de CPF: O sistema mantém uma lista de CPFs autorizados. Ao 
+encontrar o CPF 964.128.440-15 5, o documento é imediatamente tagueado como VG. 
+
+●​ Inferência Fuzzy: Em documentos onde o CPF está ausente ou ilegível (comum em 
+recibos manuais), o sistema recorre à biblioteca RapidFuzz para calcular a Distância de 
+Levenshtein entre o nome extraído e os nomes das entidades. Uma similaridade acima 
+de 90% (ex: "VAGNER GAIATTO" vs "VAGNER LUIZ GAIATTO") aciona a classificação 
+automática. Casos ambíguos são marcados para validação humana na GUI.3 
+
+
+
+4. O Motor de Reconciliação: Algoritmos e Teoria dos 
+Grafos 
+A "reconciliação complexa" solicitada exige mais do que simples comparações de valores. O 
+sistema deve resolver o problema de alocação de recursos financeiros, matematicamente 
+descrito como uma variação do Problema da Soma de Subconjuntos (Subset Sum 
+Problem). 
+4.1. Modelagem Matemática da Reconciliação 
+O objetivo é encontrar um subconjunto de Notas Fiscais $I = \{i_1, i_2,...\}$ e um subconjunto 
+de Pagamentos $P = \{p_1, p_2,...\}$ tal que a soma dos valores seja equivalente dentro de 
+uma tolerância financeira. 
+4.1.1. Algoritmo Subset Sum com Tolerância 
+
+Para um Boleto de valor $V_{bol}$, o sistema busca no banco de dados todas as notas fiscais 
+"abertas" (não reconciliadas) do mesmo fornecedor. Utilizando programação dinâmica ou, 
+para conjuntos menores, a biblioteca itertools do Python, o sistema testa todas as 
+combinações possíveis de notas para encontrar aquelas cuja soma se aproxima de $V_{bol}$. 
+
+●​ Tolerância Flutuante: A igualdade estrita (==) é perigosa em finanças devido a 
+arredondamentos e multas. O sistema implementa uma comparação baseada em 
+epsilon: abs(sum(notas) - valor_boleto) <= tolerancia. A tolerância é configurável (ex: R$ 
+0,05 para arredondamentos, ou 2% se a data do pagamento for posterior ao 
+vencimento, indicando juros).18 
+
+4.1.2. Resolução via Grafos (NetworkX) 
+
+Para cenários onde a relação não é linear (ex: 2 boletos pagando parcialmente 3 notas), o 
+sistema modela os documentos como nós em um grafo não direcionado.20 
+
+●​ Nós: Documentos (NF, Boleto, Comprovante). 
+●​ Arestas: Conexões lógicas baseadas em evidências (mesmo valor, mesma data, mesmo 
+
+código de barras). 
+●​ Componentes Conexos: O sistema utiliza a biblioteca NetworkX para identificar 
+
+"ilhas" isoladas de documentos interconectados (Componentes Conexos). Cada 
+componente representa uma transação financeira completa. Isso permite agrupar 
+automaticamente todos os arquivos relacionados para a renomeação em lote, 
+garantindo que o sufixo de parcelamento (ex: _PARC_1-3) seja aplicado 
+consistentemente a todos os membros do grupo. 
+
+4.2. Tratamento de "Duplicatas" e Parcelamento 
+A tabela de duplicatas extraída da NF-e 5 serve como um "mapa do futuro". Se a nota prevê 3 
+pagamentos de R$ 1.000,00, o sistema cria três "slots" virtuais de reconciliação. Quando um 
+boleto real de R$ 1.000,00 é ingerido, ele ocupa um desses slots. Essa lógica preditiva é 
+
+
+
+essencial para gerar corretamente os sufixos de nomenclatura (PARC_1-3, PARC_2-3), pois o 
+sistema sabe a priori quantos pagamentos esperar, mesmo que eles cheguem em meses 
+diferentes. 
+
+5. Persistência de Dados e Design de Banco Local 
+A estabilidade do sistema em hardware instável depende de uma camada de persistência 
+robusta. O SQLite é a escolha ideal por ser serverless, transacional (ACID) e extremamente 
+leve. 
+5.1. Schema Relacional e Gestão de Estado 
+O banco de dados não armazena apenas dados, mas o estado do processamento. Isso 
+permite pausar e retomar o trabalho a qualquer momento. 
+Tabela: documents 
+Armazena a integridade física e metadados primários. 
+Coluna Tipo Descrição 
+id INTEGER PK Identificador único. 
+file_hash TEXT Hash MD5 para detecção de 
+
+duplicatas (idempotência). 
+original_path TEXT Caminho de origem. 
+doc_type TEXT 'NFE', 'NFSE', 'BOLETO', 
+
+'COMPROVANTE'. 
+entity_tag TEXT 'VG' ou 'MV' (Resultado da 
+
+classificação de entidade). 
+raw_text BLOB Texto extraído (cache para 
+
+evitar re-OCR). 
+status TEXT 'INGESTED', 'PARSED', 
+
+'RECONCILED', 'RENAMED'. 
+
+Tabela: transactions 
+Normaliza os dados financeiros extraídos. 
+Coluna Tipo Descrição 
+doc_id INTEGER FK Referência ao documento 
+
+físico. 
+supplier_clean TEXT Nome do fornecedor 
+
+normalizado (caixa alta, sem 
+sufixos). 
+
+amount_cents INTEGER Valor em centavos (evita erros 
+de ponto flutuante). 
+
+due_date TEXT Data de vencimento (ISO8601). 
+
+
+
+payment_date TEXT Data efetiva do pagamento 
+(ISO8601). 
+
+Tabela: matches 
+Armazena as arestas do grafo de reconciliação. 
+Coluna Tipo Descrição 
+parent_doc_id INTEGER Geralmente o Boleto ou 
+
+Comprovante. 
+child_doc_id INTEGER Geralmente a Nota Fiscal. 
+match_type TEXT 'EXACT', 'FUZZY', 'MANUAL'. 
+confidence FLOAT Score de confiança da IA (0.0 
+
+- 1.0). 
+
+5.2. Otimizações de Banco de Dados 
+Para garantir que a interface não congele durante consultas pesadas: 
+
+●​ Modo WAL (Write-Ahead Logging): Ativado via PRAGMA journal_mode=WAL;. Permite 
+leituras e escritas simultâneas, essencial para que a GUI (leitora) permaneça responsiva 
+enquanto o Scanner (escritor) insere novos arquivos.21 
+
+●​ Índices Compostos: Índices criados sobre (supplier_clean, amount_cents) permitem 
+que o algoritmo de Subset Sum localize candidatos a reconciliação em tempo 
+logarítmico, instantâneo mesmo com milhares de registros. 
+
+6. Padronização de Nomenclatura e Regras de 
+Negócio 
+A saída final do sistema é a renomeação física dos arquivos, que deve seguir estritamente as 
+regras de negócio de Vagner e Marcelli.5 
+
+6.1. A Gramática da Nomenclatura 
+O padrão de nome é construído dinamicamente a partir dos metadados validados. 
+Template Base: DATA_ENTIDADE_FORNECEDOR_... 
+Regras Específicas por Cenário: 
+
+1.​ Cenário Simples (1 Nota, 1 Boleto): 
+○​ Ambos recebem o sufixo _VALORBOLETO_TIPO_NUMERO. 
+○​ Exemplo Boleto: 2025.12.13_VG_AGROPECUARIA X_100,00_BOLETO_220.pdf 
+○​ Exemplo Nota: 2025.12.13_VG_AGROPECUARIA X_100,00_NFE_220.pdf 
+
+2.​ Cenário Agrupado (N Notas, 1 Boleto): 
+○​ O Boleto carrega os números de todas as notas que quita: 
+
+..._BOLETO_220_221.pdf. 
+
+
+
+○​ A Nota carrega o valor do boleto e seu próprio valor: 
+..._1000,00_200,00_NFE_220.pdf (Onde 1000 é o total do boleto e 200 é o valor 
+da nota). 
+
+3.​ Cenário Parcelado (1 Nota, N Boletos): 
+○​ O sistema injeta a tag PARC_X-Y com base na lógica preditiva da tabela de 
+
+duplicatas. 
+○​ Exemplo: ..._3300,00_6600,00_PARC_1-2_NFE_6270.pdf. 
+
+A função de sanitização de nomes remove sufixos jurídicos ("LTDA", "ME", "S.A.") e caracteres 
+especiais, garantindo compatibilidade com qualquer sistema de arquivos Windows/Linux.5 
+
+7. Interface de Usuário e Fluxo de Validação 
+"Human-in-the-Loop" 
+A interface gráfica (GUI) é crítica para a confiança do usuário. Ela é construída com Tkinter e 
+estilizada com ttkbootstrap, oferecendo uma aparência moderna e profissional com 
+consumo mínimo de recursos.22 
+
+7.1. O Painel de Controle MVC 
+A GUI segue o padrão Model-View-Controller (MVC) para separar a lógica de apresentação 
+da lógica de negócios.23 
+
+●​ Painel Esquerdo (Status): Lista hierárquica dos arquivos ingeridos, com indicadores 
+visuais de status (ícones coloridos). 
+
+●​ Painel Central (Mesa de Reconciliação): O coração da aplicação. Apresenta uma 
+TreeView onde os documentos são agrupados por "Transação". O usuário vê o Boleto 
+como "Pai" e as Notas Fiscais sugeridas como "Filhos". 
+
+○​ Sistema de Semáforo: 
+■​ 🟢 Verde: Match Perfeito (Valores e Datas coincidem com precisão). O 
+
+sistema sugere aprovação automática. 
+■​ 🟡 Amarelo: Match Fuzzy (Diferença de centavos ou datas próximas). Exige 
+
+confirmação visual. 
+■​ 🔴 Vermelho: Documentos órfãos (sem par correspondente). Exige ação 
+
+manual. 
+○​ Interação: O usuário pode arrastar e soltar (drag-and-drop) notas órfãs para 
+
+dentro de grupos de boletos para forçar uma reconciliação manual, corrigindo 
+erros da IA. 
+
+●​ Painel Direito (Preview): Ao clicar em um arquivo, uma miniatura renderizada (PNG 
+gerado pelo PyMuPDF) é exibida, permitindo conferência rápida de valores e nomes 
+sem a necessidade de abrir leitores de PDF externos pesados. 
+
+
+
+8. Roteiro de Implementação e Testes 
+Para garantir o sucesso do desenvolvimento, o projeto deve seguir um cronograma faseado, 
+com testes de integração contínuos. 
+Fase 1: Fundação e Ingestão (Semanas 1-2) 
+
+●​ Configuração do ambiente Python e repositório. 
+●​ Implementação da classe Scanner com PyMuPDF. 
+●​ Desenvolvimento do "Segmentador Inteligente" para detectar e dividir PDFs 
+
+combinados (NFE + Boleto). 
+●​ Testes unitários com o arquivo Arquivos Combinados...pdf para garantir a separação 
+
+correta das páginas. 
+Fase 2: Inteligência e Extração (Semanas 3-4) 
+
+●​ Integração do modelo GLiNER (versão CPU small) para extração de Fornecedores. 
+●​ Implementação dos "Drivers" de Regex para Banco do Brasil (SISBB), Sicoob e Sicredi.5 
+
+●​ Codificação da lógica de detecção de Agendamento vs. Pagamento. 
+●​ Validação de CNPJs e CPFs (Vagner/Marcelli). 
+
+Fase 3: Lógica de Reconciliação (Semanas 5-6) 
+●​ Implementação do algoritmo Subset Sum e construção do Grafo de documentos 
+
+(NetworkX). 
+●​ Lógica de parsing da tabela de "Duplicatas" da NF-e. 
+●​ Testes de cenário: 1-para-1, N-para-1 e Parcelamentos complexos. 
+
+Fase 4: Interface e Persistência (Semanas 7-8) 
+●​ Construção da GUI Tkinter/ttkbootstrap. 
+●​ Integração com SQLite (Schema e Queries). 
+●​ Implementação do Drag-and-Drop e visualização de status. 
+●​ Módulo de renomeação segura (Dry-run antes de alterar arquivos em disco). 
+
+Fase 5: Validação de Campo (Semana 9) 
+●​ Execução do sistema em uma máquina virtual com 4GB de RAM (simulando hardware 
+
+intermediário). 
+●​ Processamento de um lote de 500 documentos reais. 
+●​ Refinamento de tolerâncias financeiras e dicionários de normalização de nomes. 
+
+Este relatório técnico estabelece um plano de engenharia completo e rigoroso para o 
+SRDA-Rural. Ao priorizar algoritmos eficientes e modelos de IA otimizados para CPU, o 
+sistema entrega a automação robusta exigida pelas entidades financeiras rurais, 
+transformando o caos documental em um arquivo auditável, organizado e preciso. 
+
+
+
+Referências citadas 
+
+1.​ Planejamento de Sistema de Automação Documental 
+2.​ Quantization-Aware Training for Large Language Models with PyTorch, acessado 
+
+em dezembro 17, 2025, https://pytorch.org/blog/quantization-aware-training/ 
+3.​ Blindagem Cognitiva e Resiliência via SLM 
+4.​ How to Build an Accounting System using SQLite | by Kenneth Infante - Medium, 
+
+acessado em dezembro 17, 2025, 
+https://medium.com/data-science/how-to-build-an-accounting-system-using-sq
+lite-2ce31f8b8652 
+
+5.​ Arquivos Combinados de Algumas Possibilidades.pdf 
+6.​ 6 - Boleto layout - FitBank API, acessado em dezembro 17, 2025, 
+
+https://dev.fitbank.com.br/docs/boleto-layout 
+7.​ boleto js febraban - GitHub Gist, acessado em dezembro 17, 2025, 
+
+https://gist.github.com/dataserver/f4610e6f676f5c679a4c2e235614ab85 
+8.​ ZXing not reading Brazilian Barcode bills (interleaved 2 of 5) correctly. How can I 
+
+fix it?, acessado em dezembro 17, 2025, 
+https://stackoverflow.com/questions/22234424/zxing-not-reading-brazilian-barco
+de-bills-interleaved-2-of-5-correctly-how-ca 
+
+9.​ Emissão de comprovantes - Autorizável Comprovante Pagamento 25/02/2022 
+(0053301) SEI 03750.020305.000099/2022-33 / pg. 1 - Funpresp, acessado em 
+dezembro 17, 2025, 
+https://www.funpresp.com.br/wp-content/uploads/2022/03/2022.01_AGU.pdf 
+
+10.​Qual a diferença do agendamento para o pagamento? - YouTube, acessado em 
+dezembro 17, 2025, https://www.youtube.com/watch?v=QkwFu-Ij2gw 
+
+11.​Agendamento automático de boletos: Praticidade nos seus pagamentos - Blog 
+BB, acessado em dezembro 17, 2025, 
+https://blog.bb.com.br/agendamento-automatico-de-boletos-praticidade-nos-se
+us-pagamentos/ 
+
+12.​Emissão de comprovantes, acessado em dezembro 17, 2025, 
+https://acessoinformacao.com.br/transparencia/arquivos/download/2e3f18b6b7b
+cb582296050dab6967e25512b7440.pdf 
+
+13.​Need OCR App to Split PDF into separate PDFs by Unique ID or Invoice Number - 
+Reddit, acessado em dezembro 17, 2025, 
+https://www.reddit.com/r/automation/comments/1ok7mrw/need_ocr_app_to_split
+_pdf_into_separate_pdfs_by/ 
+
+14.​Planejamento Renomeio Documentos Fazenda 
+15.​The Basics - PyMuPDF documentation, acessado em dezembro 17, 2025, 
+
+https://pymupdf.readthedocs.io/en/latest/the-basics.html 
+16.​urchade/GLiNER: Generalist and Lightweight Model for Named Entity Recognition 
+
+(Extract any entity types from texts) @ NAACL 2024 - GitHub, acessado em 
+dezembro 17, 2025, https://github.com/urchade/GLiNER 
+
+17.​Segmenting image files with text (and pictures) into blocks - Stack Overflow, 
+acessado em dezembro 17, 2025, 
+https://stackoverflow.com/questions/61198983/segmenting-image-files-with-text
+
+
+
+-and-pictures-into-blocks 
+18.​Summing large lists of floating point numbers in Python, acessado em dezembro 
+
+17, 2025, 
+https://www.math.cmu.edu/~gautam/c/2024-387/notes/code/compensated-sum
+mation.html 
+
+19.​Python Program for Subset Sum Problem | DP-25 - GeeksforGeeks, acessado em 
+dezembro 17, 2025, 
+https://www.geeksforgeeks.org/python/python-program-for-subset-sum-proble
+m-dp-25/ 
+
+20.​Otimização de Código para Documentos Financeiros 
+21.​Pragma statements supported by SQLite, acessado em dezembro 17, 2025, 
+
+https://sqlite.org/pragma.html 
+22.​Creating a GUI in Python With TtkBootstrap - Developer Service Blog, acessado 
+
+em dezembro 17, 2025, 
+https://developer-service.blog/creating-a-gui-in-python-with-ttkbootstrap/ 
+
+23.​Tkinter MVC - Python Tutorial, acessado em dezembro 17, 2025, 
+https://www.pythontutorial.net/tkinter/tkinter-mvc/

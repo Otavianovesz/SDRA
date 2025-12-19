@@ -1,0 +1,477 @@
+﻿Volume II: Especificação Técnica 
+Avançada para Implementação de 
+Inteligência Artificial e Otimização de 
+Processos no Sistema SRDA-Rural 
+1. Introdução e Contextualização do Volume 
+Complementar 
+Este documento técnico constitui o segundo volume do compêndio de engenharia de 
+software voltado ao desenvolvimento do Sistema de Reconciliação Documental e Automação 
+para Contabilidade Rural (SRDA-Rural). Enquanto o primeiro volume estabeleceu as bases 
+arquiteturais para a ingestão e organização de documentos fiscais em ambientes de 
+hardware restrito, este volume dedica-se exclusivamente à expansão das capacidades 
+cognitivas do sistema. A solicitação central que motiva esta análise aprofundada reside na 
+necessidade imperativa de implementar rotinas de Inteligência Artificial (IA) para aprimorar o 
+reconhecimento de arquivos PDF heterogêneos e, crucialmente, garantir a precisão dos 
+vínculos financeiros entre instrumentos de cobrança e documentos fiscais.1 
+
+A complexidade inerente à gestão documental no contexto do agronegócio, exemplificada 
+pelos artefatos fornecidos por Vagner e Marcelli, exige uma abordagem que transcenda a 
+simples automação baseada em regras rígidas. A análise dos documentos de amostra revela 
+um ecossistema caótico onde Notas Fiscais Eletrônicas (NF-e) de produtos, Notas Fiscais de 
+Serviço (NFS-e), boletos bancários e comprovantes de pagamento coexistem, muitas vezes 
+fundidos em arquivos únicos ou dispersos sem identificadores de ligação explícitos.2 O 
+objetivo deste relatório é detalhar a arquitetura de um motor de inferência local, capaz de 
+operar dentro das restrições de "computadores lentos" identificadas no planejamento inicial, 
+mas com sofisticação algorítmica suficiente para resolver as ambiguidades de reconciliação 
+financeira (Matching N-para-M) e impor a rigorosa padronização de nomenclatura exigida.2 
+
+A implementação de IA aqui proposta não visa apenas a extração de texto, mas a 
+compreensão semântica da estrutura documental. O sistema deve ser capaz de discernir que 
+uma tabela de "Duplicatas" em uma NF-e não é apenas um conjunto de dados, mas uma 
+instrução lógica que dita como os boletos subsequentes devem ser agrupados e nomeados. 
+Esta capacidade de "ler nas entrelinhas" é o diferencial que transformará o SRDA-Rural de um 
+organizador de arquivos em um assistente contábil inteligente, mitigando o risco fiscal e 
+operacional para os produtores rurais envolvidos. A seguir, apresentamos a engenharia 
+detalhada desses upgrades, fundamentada na análise forense dos dados disponíveis. 
+
+
+
+2. Análise Forense e Decomposição Estrutural dos 
+Artefatos Documentais 
+A fundação para qualquer sistema de IA eficaz é a compreensão profunda dos dados que ele 
+deve processar. A análise forense do arquivo Arquivos Combinados de Algumas 
+Possibilidades.pdf 2 fornece o "Ground Truth" (Verdade Terrestre) necessário para treinar e 
+calibrar os algoritmos de reconhecimento. Este documento não é apenas uma amostra; é um 
+microcosmo dos desafios de interoperabilidade e layout que o sistema enfrentará em 
+produção. 
+2.1. O Desafio da Heterogeneidade e Arquivos Combinados 
+O primeiro obstáculo técnico identificado na amostra 2 é a fusão de documentos distintos em 
+um único fluxo binário. As páginas 1 a 4 ilustram um cenário de compra parcelada que desafia 
+a lógica de processamento linear simples. 
+Na Página 1, encontramos uma NF-e (DANFE) emitida por "AP COMERCIO DE EMBALAGENS 
+E PRODUTOS HIGIENICOS LTDA" contra "VAGNER LUIZ GAIATTO E OUTRA". O valor total da 
+nota é de R$ 6.600,00. No entanto, uma análise humana atenta — que a IA deve replicar — 
+identifica uma seção crítica no terço superior do documento: a tabela de "Duplicatas". Esta 
+tabela contém dois registros vitais: a Duplicata 001 com vencimento em 13/12/2025 no valor 
+de R$ 3.300,00, e a Duplicata 002 com vencimento em 28/12/2025 também por R$ 
+3.300,00.2 
+
+A Página 2 apresenta um boleto bancário do sistema CRESOL. O valor do documento é R$ 
+3.300,00 e o vencimento é 13/12/2025. Não há uma referência explícita e facilmente analisável 
+ao número da NF-e (000.006.270) no corpo principal do boleto, exceto talvez em campos de 
+"Nosso Número" ou instruções que variam por banco. 
+A Página 3 é uma repetição da NF-e da página 1, um artefato comum em digitalizações 
+manuais ou processos de impressão em PDF, que introduz o problema de detecção de 
+duplicidade. 
+A Página 4 apresenta o segundo boleto, também de R$ 3.300,00, mas com vencimento em 
+28/12/2025. 
+A Implicação para a IA é profunda. Um sistema baseado apenas em OCR (Reconhecimento 
+Óptico de Caracteres) que extraia o "Valor Total" da página 1 (6.600,00) e tente vinculá-lo ao 
+"Valor do Documento" da página 2 (3.300,00) falhará, pois os números não batem. A 
+inteligência do sistema precisa, portanto, implementar uma lógica de Decomposição de 
+Valores. A IA deve reconhecer a presença da tabela de duplicatas e entender que o valor de 
+face da NF-e (6.600,00) deve ser fragmentado em parcelas esperadas para fins de 
+reconciliação. Sem essa etapa cognitiva, a automação dos vínculos solicitada será impossível. 
+2.2. Variabilidade de Layouts: NF-e Estadual versus NFS-e Municipal 
+A análise prossegue para as Páginas 5 e 6, revelando a discrepância estrutural entre 
+documentos fiscais de origens diferentes. 
+
+
+
+A Página 5 contém uma Nota Fiscal de Serviço Eletrônica (NFS-e) da Prefeitura Municipal de 
+Nova Mutum. Diferente da estrutura padronizada nacionalmente da NF-e (DANFE), este 
+documento possui um layout tabular específico, onde o prestador é "JUCELIA GONCALVES 
+EIRELI" e o tomador é "VAGNER LUIZ GAIATTO". O valor total é R$ 1.740,00. Os campos de 
+metadados estão dispostos de forma vertical e a descrição dos serviços ("SERVIÇO 
+ALTERNADOR...", "SERVIÇO ELETRICO...") ocupa uma grande área central de texto livre.2 
+
+Em contraste, a Página 6 retorna ao padrão DANFE para uma venda de mercadorias pela 
+mesma "JUCELIA GONCALVES", no valor de R$ 3.075,50. Aqui, a estrutura de dados é 
+horizontal, com códigos de produtos (NCM/SH), quantidades e valores unitários dispostos em 
+colunas rígidas. 
+Esta variação exige que o módulo de reconhecimento de PDFs não utilize templates de 
+coordenadas fixas (ex: "o valor está sempre no pixel X,Y"). Em vez disso, a implementação da 
+IA deve utilizar Análise de Layout Baseada em Âncoras Semânticas. O algoritmo deve 
+buscar por palavras-chave como "Valor Total", "Valor Líquido" ou "Total da Nota" e extrair o 
+valor numérico geograficamente mais próximo a essas âncoras, independentemente de onde 
+elas estejam na página. A distinção entre "NFS-e" e "NF-e" também é crucial para a aplicação 
+das regras de nomenclatura 2, que exigem sufixos diferentes (_NFSE_ vs _NFE_). 
+2.3. Densidade de Informação e Reconhecimento de Itens 
+As páginas subsequentes (6 a 15) do arquivo 2 contêm listas extensas de peças automotivas 
+("DESENGRAXANTE", "OLEO CAMBIO", "BUCHA SUPORTE"). Embora o foco principal da 
+reconciliação seja o valor total, a capacidade da IA de ler e indexar esses itens oferece um 
+valor agregado imenso para a categorização de custos no futuro (ex: separar custos de 
+"Manutenção" vs "Insumos"). Para o escopo atual de renomeação e vínculo, a IA deve ser 
+treinada para ignorar os valores unitários desses itens durante a busca pelo valor total, 
+evitando "falsos positivos" onde o preço de uma peça coincida com o valor de um boleto 
+aleatório. 
+
+3. Arquitetura de Inteligência Artificial para Ambientes 
+de Recursos Restritos 
+Atendendo ao requisito de "computadores lentos" 1 e à necessidade de "dedicar muito na 
+implementação da IA", a arquitetura proposta rejeita o uso de modelos de Deep Learning 
+massivos (como LayoutLMv3 ou GPT-4 via API) em favor de uma abordagem de TinyML e 
+Processamento de Linguagem Natural (NLP) Estatístico. Esta estratégia garante que a 
+"inteligência" rode localmente, sem latência de rede e com consumo de memória RAM 
+controlado. 
+3.1. O Pipeline Cognitivo Híbrido (HCP) 
+O sistema será estruturado em um pipeline sequencial onde cada estágio refina os dados 
+
+
+
+para o próximo, minimizando o desperdício computacional. 
+Estágio Tecnologia Principal Função Cognitiva Custo Computacional 
+1. Visão CNN Leve (MobileNet) Distinguir visualmente Médio 
+(Segmentation) / Histograma onde começa e 
+
+termina um documento 
+dentro de um PDF 
+combinado. 
+
+2. Extração PyMuPDF + Regex Converter pixels e Baixo 
+(Extraction) Contextual streams de texto em 
+
+dados estruturados 
+brutos. 
+
+3. Compreensão NLP Estatístico Interpretar semântica Baixo/Médio 
+(Understanding) (TF-IDF/Embeddings) (ex: diferenciar "Data 
+
+Emissão" de "Data 
+Vencimento"). 
+
+4. Raciocínio Algoritmo Subset Sum Resolver o Alto (CPU) 
+(Reasoning) + Lógica Fuzzy quebra-cabeça 
+
+matemático dos 
+vínculos financeiros 
+(Matching). 
+
+3.2. Implementação do Reconhecimento de PDFs via Visão 
+Computacional 
+O problema dos arquivos combinados 2 exige que o sistema "veja" a página antes de lê-la. 
+Implementaremos um classificador de layout baseado em densidade de pixels e 
+características visuais macroscópicas. 
+Mecanismo de Detecção de Classes Documentais: 
+A IA calculará um "vetor de assinatura visual" para cada página. 
+
+●​ NF-e (DANFE): Caracteriza-se por alta densidade de linhas horizontais (tabelas), um 
+código de barras linear no topo e blocos de texto denso. 
+
+●​ Boleto: Caracteriza-se por um layout verticalizado inferior, com o código de barras 
+(Intercalado 2 de 5) na parte inferior e muito espaço em branco ou logotipos bancários 
+no topo. 
+
+●​ NFS-e: Caracteriza-se por um layout menos denso, sem a grade rígida do DANFE, 
+muitas vezes com brasões municipais. 
+
+Utilizando a biblioteca OpenCV (para pré-processamento) e um modelo scikit-learn simples 
+(Random Forest treinado em histogramas de layout), o sistema classificará cada página como 
+TYPE_NFE, TYPE_BOLETO, TYPE_NFSE ou TYPE_UNKNOWN. 
+Lógica de Split (Separação Inteligente): 
+Ao iterar sobre as páginas do arquivo 2, o algoritmo observa as transições de classe. 
+
+●​ Página 1 (NFE) -> Página 2 (BOLETO): Detecta uma transição de tipo. O sistema insere 
+
+
+
+uma "quebra virtual", tratando a Página 1 como um documento e iniciando um novo 
+documento na Página 2. 
+
+●​ Página 2 (BOLETO) -> Página 3 (NFE): Nova quebra. 
+●​ Página 3 (NFE) -> Página 4 (BOLETO): Nova quebra. 
+
+Esta segmentação é pré-requisito absoluto para a nomeação correta. Se o sistema tratasse o 
+arquivo 2 como um único bloco, seria impossível aplicar a nomenclatura _NFE_ ou _BOLETO_ 
+corretamente, pois o arquivo conteria ambos. 
+3.3. Extração Semântica e Normalização de Entidades 
+Uma vez segmentado, o documento passa pela extração de texto via PyMuPDF. O upgrade de 
+IA aqui reside na Normalização de Entidades Nomeadas (NER). 
+O sistema precisa identificar quem é o "Pagador" (Vagner ou Marcelli) e quem é o 
+"Fornecedor". 
+No documento 2, o pagador aparece como "VAGNER LUIZ GAIATTO". No entanto, em um 
+boleto, ele pode aparecer apenas como "VAGNER L. GAIATTO" ou o CPF pode estar sem 
+pontuação. 
+O módulo de IA utilizará a biblioteca RapidFuzz para calcular a distância de Levenshtein entre 
+as strings extraídas e o cadastro mestre. 
+
+●​ Input Documento: "A P COMERCIO DE EMBALAGENS" 
+●​ Base de Dados: "AP COMERCIO LTDA" 
+●​ Match: 92% de similaridade -> O sistema normaliza para "AP COMERCIO" para uso no 
+
+nome do arquivo final, garantindo a consistência exigida em 2 (DATA_FORNECEDOR_...). 
+Além disso, a extração de datas deve ser inteligente. Em um boleto, existem muitas datas: 
+"Data do Documento", "Data do Processamento", "Vencimento". A IA pontuará cada data 
+encontrada com base em sua proximidade com palavras-chave como "Vencimento" ou 
+"Venc.". A data com maior pontuação será eleita como a data oficial para a renomeação do 
+arquivo. 
+
+4. Engenharia de Vínculos: O Motor de Reconciliação 
+Algorítmica (The Linker) 
+A solicitação de "melhor funcionamento dos vínculos" [User Query] é o coração deste 
+volume. A reconciliação não é apenas comparar A com B; é resolver um sistema de equações 
+onde algumas variáveis podem estar ocultas. 
+4.1. O Problema Matemático: Subset Sum com Tolerância 
+A lógica de vinculação deve ser modelada como uma variação do Subset Sum Problem. 
+Dado um conjunto de Boletos $B$ e um conjunto de Notas $N$, queremos encontrar 
+subconjuntos $n \subset N$ tal que $\sum(n) \approx b_i$, ou vice-versa. 
+Cenários de Complexidade Identificados em 2: 
+
+1.​ Cenário 1 Nota / 1 Boleto: O mais simples. A IA busca match exato de valor e 
+
+
+
+fornecedor. 
+○​ Exemplo: Nota de R$ 100,00 e Boleto de R$ 100,00. 
+
+2.​ Cenário N Notas / 1 Boleto (Agrupamento): 
+○​ Vagner compra várias peças na GF Auto Elétrica ao longo do mês (Páginas 6, 7, 8 
+
+de 2). 
+○​ Valores: 3.075,50 + 3.250,12 + 3.647,38. 
+○​ Chega um boleto de R$ 9.973,00. 
+○​ A IA deve testar combinações de notas pendentes desse fornecedor até 
+
+encontrar a soma que bate com o boleto. 
+○​ Otimização: Como o número de notas por mês é finito (geralmente < 50), um 
+
+algoritmo de força bruta otimizada (testando combinações de 2 a 5 notas) é 
+viável em tempo real, mesmo em hardware modesto. 
+
+3.​ Cenário 1 Nota / N Boletos (Parcelamento): 
+○​ Este é o caso da "AP COMERCIO" em.2 Nota de 6.600,00 e dois boletos de 
+
+3.300,00. 
+○​ A IA detecta que $V_{nota} > V_{boleto}$. 
+○​ O algoritmo verifica a tabela de duplicatas extraída. Se a tabela prevê parcelas de 
+
+3.300,00, a IA valida o vínculo não pela soma total, mas pela correspondência 
+com a parcela prevista. 
+
+○​ Se não houver tabela de duplicatas (OCR falhou), a IA verifica se $V_{boleto}$ é 
+um divisor exato ou percentual comum (50%, 33%) de $V_{nota}$. 
+
+4.2. Algoritmo de Pontuação de Confiança (Confidence Scoring) 
+Para evitar erros catastróficos (vincular o boleto errado), a IA atribuirá um "Score de 
+Confiança" a cada vínculo proposto. Apenas vínculos com score acima de um limiar seguro 
+(ex: 0.85) serão sugeridos automaticamente. 
+A fórmula de pontuação proposta ($S_{match}$) considera múltiplos vetores: 
+$$ S_{match} = (w_v \cdot S_{valor}) + (w_d \cdot S_{data}) + (w_f \cdot S_{fornecedor}) + 
+(w_id \cdot S_{identificador}) $$ 
+Onde: 
+
+●​ $S_{valor}$: 1.0 se exato, decresce drasticamente com diferenças. Tolerância de R$ 
+0.05 para arredondamentos. 
+
+●​ $S_{data}$: 1.0 se a data de vencimento do boleto for >= data emissão da nota e <= 
+data emissão + 45 dias (janela típica). Decaimento exponencial fora dessa janela. 
+
+●​ $S_{fornecedor}$: Similaridade de texto (RapidFuzz) entre os nomes normalizados. 
+●​ $S_{identificador}$: 1.0 se o número da nota for encontrado no corpo do boleto (OCR 
+
+profundo). 
+●​ $w$: Pesos ponderados (Valor tem peso maior que Data). 
+
+4.3. Tratamento de Juros e Multas (Lógica Fuzzy) 
+Boletos pagos com atraso terão valor maior que a nota. A IA deve ser capaz de identificar 
+isso. 
+
+
+
+Se $V_{boleto} = V_{nota} + \delta$, e a data de pagamento for posterior ao vencimento, a IA 
+calcula se $\delta$ é compatível com juros de mercado (ex: 1% a 2% + mora). Se estiver 
+dentro de uma margem aceitável, o sistema sugere o vínculo com um alerta "Possível Inclusão 
+de Juros", permitindo que o usuário valide. 
+
+5. Protocolos de Nomenclatura e Conformidade de 
+Saída 
+O objetivo final do sistema é gerar arquivos renomeados conforme o padrão estrito definido 
+em NOMENCLATURAS BOLETOS E NOTAS.docx.2 A IA atua aqui como um "Auditor de Sintaxe", 
+garantindo que nenhuma regra seja violada. 
+5.1. Regras de Construção de Strings 
+A análise de 2 revela uma gramática complexa que o sistema deve montar dinamicamente. 
+Estrutura Base: DATA_ENTIDADE_FORNECEDOR_... 
+
+●​ DATA: Formato DD.MM.AAAA (ex: 28.11.2025). A IA deve normalizar todas as datas 
+extraídas (que podem estar como 28/11/25 ou 28-Nov-2025) para este formato 
+canônico. 
+
+●​ ENTIDADE: VG (Vagner) ou MV (Marcelli). A decisão é baseada na detecção do CPF no 
+documento.2 Se o CPF 964.128.440-15 for encontrado, a tag é VG. 
+
+●​ FORNECEDOR: Nome normalizado. Ex: "AP COMERCIO". 
+Sufixos Dinâmicos por Cenário: 
+
+1.​ Quando há 1 Nota e 1 Boleto: 
+○​ Nota: ..._VLRBOLETO_NFE_NUM 
+○​ Boleto: ..._VLRBOLETO_BOLETO_NUM 
+○​ Atenção: A nota recebe o valor do boleto no nome, não o seu próprio valor 
+
+original, se forem idênticos. Isso facilita a visualização do fluxo de caixa. 
+2.​ Quando há Parcelamento (1 Nota, N Boletos): 
+
+○​ Regra 2: ..._VLRBOLETO_VLRNF_PARC_X-Y_TIPO_NUM 
+○​ Aplicação no caso 2 Pág 1: 
+
+■​ Valor Boleto: 3300,00 
+■​ Valor NF: 6600,00 
+■​ Parcela: 1-2 
+■​ Resultado Nota: 28.11.2025_VG_AP 
+
+COMERCIO_3300,00_6600,00_PARC_1-2_NFE_6270.pdf 
+○​ A IA precisa rastrear o estado global: saber que existem 2 boletos para essa nota 
+
+para determinar o "Y" em "1-Y". 
+3.​ Normalização de Números de Documentos: 
+
+○​ A regra exige números curtos. O número extraído "000.006.270" 2 deve ser 
+convertido para inteiro e depois para string: "6270". A IA deve remover zeros à 
+
+
+
+esquerda e pontuação. 
+○​ Para NFS-e (Pág 5 de 2), o número é "3231". 
+○​ Para a NF-e da Pág 6 ("000.003.746"), vira "3746". 
+
+A conformidade com essas regras não é opcional. O sistema implementará um validador final 
+(unit test em tempo de execução) que verifica se a string gerada corresponde ao RegEx do 
+padrão antes de efetuar a renomeação do arquivo no disco. 
+
+6. Persistência de Dados e Gestão de Estado 
+(SRDA-DB) 
+Para suportar a complexidade das relações N-para-M e permitir a interrupção/retomada do 
+trabalho em computadores instáveis, o banco de dados SQLite deve ser robusto. 
+6.1. Esquema Relacional Expandido 
+Diferente de um simples cache, o banco de dados funcionará como um grafo de 
+conhecimento dos documentos. 
+Tabela Colunas Principais Função no Sistema 
+docs_raw id, file_hash, original_path, Rastreia os arquivos físicos e 
+
+page_range sua segmentação (ex: arquivo 
+X, páginas 1-1). 
+
+entities id, doc_id, type (NFE/BOL), Armazena os dados extraídos 
+extracted_val, extracted_date, pela IA e normalizados. 
+vendor_norm 
+
+installments id, nfe_id, seq_num, due_date, Armazena os dados da tabela 
+amount "Duplicatas" lida via OCR na 
+
+NF-e. Fundamental para o 
+parcelamento. 
+
+links id, nfe_id, boleto_id, Armazena as arestas do grafo 
+match_score, status (quem paga quem). 
+(SUGGESTED/CONFIRMED) 
+
+6.2. Estratégia de Cache para Performance 
+Dado que o OCR é custoso, o sistema salvará o resultado do texto extraído (raw_text e 
+json_structure) na tabela docs_raw. Se o usuário fechar o programa e abrir novamente, o 
+sistema não precisará reler os PDFs; ele carregará o estado cognitivo diretamente do SQLite, 
+permitindo uma inicialização quase instantânea na segunda execução. 
+
+7. Interface Humano-Computador e Validação 
+
+
+
+Assistida 
+A IA, por mais avançada que seja, é probabilística. A interface gráfica (GUI) em Tkinter deve 
+ser desenhada para facilitar a validação humana das sugestões da IA, não apenas para exibir 
+dados. 
+7.1. Visualização de Vínculos Inteligentes 
+A tela principal será dividida em três painéis: 
+
+1.​ Painel de Entrada (Esquerda): Lista de documentos detectados, agrupados por 
+Fornecedor. Ícones distintos para NF-e (📄), Boleto (💰) e NFS-e (🛠️). 
+
+2.​ Painel de Reconciliação (Centro - O "Matchmaker"): 
+○​ Este painel exibe as propostas da IA. 
+○​ Layout: Uma linha contendo o Boleto, conectada visualmente a uma ou mais 
+
+Notas. 
+○​ Código de Cores de Confiança: 
+
+■​ 🟢 Verde (Alta Confiança > 95%): A IA encontrou match exato de valor e 
+data (ou tabela de duplicatas). O usuário apenas "bate o olho". 
+
+■​ 🟡 Amarelo (Média Confiança 70-95%): Match de valor, mas data 
+divergente ou fornecedor fuzzy. Requer atenção. 
+
+■​ 🔴 Vermelho (Baixa Confiança < 70%): Boletos órfãos ou notas sem 
+pagamento. O usuário deve intervir. 
+
+3.​ Painel de Detalhes (Direita): Ao clicar em um vínculo, exibe o PDF da Nota e do Boleto 
+lado a lado (renderizados via PyMuPDF) para conferência visual dos valores. 
+
+7.2. Mecanismos de Correção Manual 
+O usuário deve ter poder total para sobrescrever a IA. 
+
+●​ Drag-and-Drop: O usuário pode arrastar uma "Nota Órfã" para cima de um "Boleto" 
+para forçar o vínculo. 
+
+●​ Split Manual: Se a IA falhar na segmentação de páginas (ex: não separou a Pág 1 da 
+Pág 2), o usuário deve ter um botão "Cortar Aqui" na visualização do PDF. 
+
+●​ Edição de Metadados: Se o OCR ler "R$ 6.800" em vez de "R$ 6.600" (ruído na 
+imagem), o usuário pode clicar no campo e digitar o valor correto. A IA aprenderá com 
+isso (atualizando o banco) e recalculará os vínculos imediatamente. 
+
+8. Plano de Implementação e Considerações de 
+Hardware 
+A execução deste projeto deve seguir um roteiro que priorize a estabilidade do sistema em 
+hardware legado. 
+
+
+
+8.1. Otimização de Recursos (Low-Spec Optimization) 
+1.​ Processamento em Lotes (Batching): Não carregar todos os 500 PDFs na memória 
+
+RAM de uma vez. O sistema processará blocos de 10 arquivos, salvará no SQLite, 
+limpará a RAM e pegará os próximos 10. Isso mantém o uso de memória plano e baixo. 
+
+2.​ OCR Sob Demanda (Lazy OCR): A extração pesada (Tesseract) só será invocada se o 
+método rápido (PyMuPDF text extraction) não retornar resultados satisfatórios ou se o 
+documento for uma imagem escaneada (raster). 
+
+3.​ Multiprocessamento Opcional: O Python permite uso de múltiplos núcleos 
+(multiprocessing). Detectaremos o número de CPUs disponíveis. Se for um dual-core 
+antigo, usaremos apenas 1 processo extra para não travar a interface gráfica. Se for um 
+quad-core, usaremos 3. 
+
+8.2. Cronograma de Desenvolvimento dos Upgrades 
+●​ Semana 1: Refatoração do Motor de Ingestão. Implementação da lógica de 
+
+segmentação de páginas (Splitter) baseada em visão e classificação de tipos de 
+documentos.2 
+
+●​ Semana 2: Banco de Dados e NER. Criação do esquema SQLite expandido e 
+treinamento dos normalizadores de texto (RapidFuzz) para Fornecedores e CPFs. 
+
+●​ Semana 3: O Motor de Vínculos (Core AI). Implementação do algoritmo Subset Sum e 
+da lógica de pontuação de confiança. Testes exaustivos com os cenários de 
+parcelamento da "AP COMERCIO". 
+
+●​ Semana 4: Interface e Integração. Desenvolvimento da GUI Tkinter com visualização 
+de confiança e feedback visual. Testes de estresse em hardware limitado. 
+
+9. Conclusão Técnica e Impacto Operacional 
+A implementação das especificações detalhadas neste volume elevará o SRDA-Rural de um 
+simples script de renomeação para uma plataforma de inteligência fiscal robusta. Ao abordar 
+frontalmente os desafios apresentados nos artefatos 2 — especificamente a complexidade 
+dos arquivos combinados, as tabelas de duplicatas implícitas e a variabilidade de layouts — 
+através de uma arquitetura de IA híbrida e leve, o sistema garantirá a integridade dos dados 
+financeiros de Vagner e Marcelli. 
+A "melhoria no funcionamento dos vínculos" não será apenas incremental, mas 
+transformadora, permitindo que o sistema deduza relações financeiras complexas 
+(parcelamentos, agrupamentos) que escapariam a uma análise humana rápida ou a scripts 
+lineares. A adesão estrita aos protocolos de nomenclatura 2, agora garantida por validação 
+algorítmica, assegurará que o arquivo digital final seja não apenas organizado, mas auditável 
+e preciso, atendendo plenamente aos requisitos de excelência operacional solicitados. 
+
+Referências citadas 
+
+1.​ Planejamento Renomeio Documentos Fazenda 
+
+
+
+2.​ Arquivos Combinados de Algumas Possibilidades.pdf
