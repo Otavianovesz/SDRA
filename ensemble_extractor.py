@@ -557,6 +557,19 @@ class RegexVoter:
         if 'GENERIC' in self.supplier_patterns:
              patterns.extend(self.supplier_patterns['GENERIC'])
 
+        # 4. HARDCODED NFSE PATTERNS (encoding-safe with dot wildcards)
+        # These patterns handle special chars like Ç that cause YAML encoding issues
+        if doc_type == DocumentType.NFSE:
+            nfse_hardcoded = [
+                # PRESTADOR DE SERVIÇOS multiline
+                (re.compile(r'PRESTADOR\s+DE\s+SERVI.OS\s*\n([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.98),
+                # Nome / Razão field
+                (re.compile(r'Nome\s*/\s*Raz.o:\s*\n*([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.97),
+                # Company after CPF/CNPJ
+                (re.compile(r'CPF\s*/\s*CNPJ:\s*\n*[\d\.\/\-]+\s*\n*Inscri.+?\n*([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.90),
+            ]
+            patterns = nfse_hardcoded + patterns
+
         for pattern_re, confidence in patterns:
             match = pattern_re.search(text)
             if match:
