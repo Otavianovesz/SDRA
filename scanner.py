@@ -31,6 +31,23 @@ from database import (
     KNOWN_CPFS
 )
 
+# Importa o EnsembleExtractor para extracao avancada (OCR, GLiNER, etc)
+try:
+    from ensemble_extractor import EnsembleExtractor, ExtractionResult
+    ENSEMBLE_AVAILABLE = True
+except ImportError:
+    EnsembleExtractor = None
+    ENSEMBLE_AVAILABLE = False
+    print("[AVISO] EnsembleExtractor nao disponivel, usando extracao basica")
+
+# Importa barcode extractor para boletos (optional)
+try:
+    from barcode_extractor import get_barcode_extractor
+    BARCODE_AVAILABLE = True
+except ImportError:
+    get_barcode_extractor = None
+    BARCODE_AVAILABLE = False
+
 
 # ==============================================================================
 # CONFIGURACOES E CONSTANTES
@@ -248,6 +265,27 @@ class CognitiveScanner:
         """
         self.input_folder = Path(input_folder)
         self.db = db or SRDADatabase()
+        
+        # Inicializa EnsembleExtractor para extracao avancada (com OCR)
+        self.ensemble = None
+        if ENSEMBLE_AVAILABLE:
+            try:
+                self.ensemble = EnsembleExtractor(use_gliner=True, use_ocr=True)
+                print("[OK] EnsembleExtractor ativado (GLiNER + OCR)")
+            except Exception as e:
+                print(f"[AVISO] Falha ao iniciar EnsembleExtractor: {e}")
+        
+        # Inicializa barcode extractor para boletos
+        self.barcode_extractor = None
+        if BARCODE_AVAILABLE:
+            try:
+                self.barcode_extractor = get_barcode_extractor()
+                if self.barcode_extractor.is_available():
+                    print("[OK] BarcodeExtractor ativado")
+                else:
+                    self.barcode_extractor = None
+            except:
+                pass
         
         # Cria pasta de entrada se nao existir
         self.input_folder.mkdir(parents=True, exist_ok=True)
@@ -667,27 +705,104 @@ class CognitiveScanner:
                     raw_text=segment.text
                 )
                 
-                # Determina dados principais
+                # =====================================================
+                # EXTRACAO AVANCADA (Ensemble com OCR + GLiNER)
+                # =====================================================
                 amount = segment.primary_amount
                 due_date = segment.primary_date
                 emission_date = None
                 is_scheduled = False
+                supplier_name = None
+                doc_number = None
                 
+                # Fallback: extrai dados basicos do segmento
                 for page in segment.pages_info:
                     if page.emission_date:
                         emission_date = page.emission_date
                     if page.is_scheduled:
                         is_scheduled = True
                 
-                # Insere transacao
-                if amount > 0 and entity:
+                # Se EnsembleExtractor disponivel, usa extracao avancada
+                if self.ensemble:
+                    try:
+                        ensemble_result = self.ensemble.extract_from_pdf(
+                            str(file_path),
+                            page_range=(segment.page_start, segment.page_end)
+                        )
+                        
+                        # Usa resultados do ensemble se disponiveis
+                        if ensemble_result:
+                            # Fornecedor (melhor extracao)
+                            if ensemble_result.fornecedor:
+                                supplier_name = ensemble_result.fornecedor
+                            
+                            # Valor (ensemble tem padroes mais sofisticados)
+                            if ensemble_result.amount_cents > 0:
+                                amount = ensemble_result.amount_cents
+                            
+                            # Datas (ensemble prioriza corretamente)
+                            if ensemble_result.due_date:
+                                due_date = ensemble_result.due_date
+                            if ensemble_result.emission_date:
+                                emission_date = ensemble_result.emission_date
+                            
+                            # Numero do documento
+                            if ensemble_result.doc_number:
+                                doc_number = ensemble_result.doc_number
+                            
+                            # Entidade (se nao encontrado antes)
+                            if not entity and ensemble_result.entity_tag:
+                                entity = EntityTag(ensemble_result.entity_tag)
+                            
+                            # Agendamento
+                            if ensemble_result.is_scheduled:
+                                is_scheduled = True
+                            
+                            # Log de metodo de extracao
+                            method = ensemble_result.extraction_sources.get("method", "native")
+                            print(f"    [ENSEMBLE] Método: {method} | Fornecedor: {supplier_name or '?'}")
+                    except Exception as e:
+                        print(f"    [AVISO] Ensemble falhou, usando basico: {e}")
+                
+                # Para BOLETOs, tenta barcode extractor para dados precisos
+                if segment.doc_type == DocumentType.BOLETO and self.barcode_extractor:
+                    try:
+                        barcode_result = self.barcode_extractor.extract_from_pdf(str(file_path), segment.page_start - 1)
+                        if barcode_result and barcode_result.get('success'):
+                            # Barcode tem valor e vencimento EXATOS
+                            if barcode_result.get('amount'):
+                                barcode_amount = int(barcode_result['amount'] * 100)
+                                if barcode_amount > 0:
+                                    amount = barcode_amount
+                                    print(f"    [BARCODE] Valor: {SRDADatabase.cents_to_display(amount)}")
+                            
+                            if barcode_result.get('due_date'):
+                                due_date_barcode = barcode_result['due_date']
+                                # Converte de DD/MM/YYYY para ISO
+                                if '/' in due_date_barcode:
+                                    parts = due_date_barcode.split('/')
+                                    if len(parts) == 3:
+                                        due_date = f"{parts[2]}-{parts[1]}-{parts[0]}"
+                                print(f"    [BARCODE] Vencimento: {due_date}")
+                    except Exception as e:
+                        print(f"    [AVISO] Barcode falhou: {e}")
+                
+                # Atualiza doc_number no documento se encontrado
+                if doc_number:
+                    cursor = self.db.connection.cursor()
+                    cursor.execute("UPDATE documentos SET doc_number = ? WHERE id = ?", (doc_number, doc_id))
+                    self.db.connection.commit()
+                
+                # Insere transacao com dados completos
+                if amount > 0:
                     self.db.insert_transaction(
                         doc_id=doc_id,
                         amount_cents=amount,
                         entidade_pagadora=entity,
                         emission_date=emission_date,
                         due_date=due_date,
-                        is_scheduled=is_scheduled
+                        is_scheduled=is_scheduled,
+                        supplier_clean=supplier_name  # Novo campo
                     )
                 
                 # Se for NF-e, extrai duplicatas
@@ -706,7 +821,7 @@ class CognitiveScanner:
         
         return doc_ids
     
-    def process_all(self, batch_size: int = 10) -> Dict[str, Any]:
+    def process_all(self, batch_size: int = 10, progress_callback=None) -> Dict[str, Any]:
         """
         Processa todos os arquivos da pasta de entrada.
         
@@ -715,6 +830,7 @@ class CognitiveScanner:
         
         Args:
             batch_size: Numero de arquivos por lote
+            progress_callback: Funcao callback(current, total, filename, stage) para updates
             
         Returns:
             Dicionario com estatisticas do processamento
@@ -741,14 +857,21 @@ class CognitiveScanner:
         if stats["total_files"] == 0:
             print(f"\n[AVISO] Nenhum arquivo PDF encontrado em {self.input_folder}")
             print("Crie a pasta 'Input' e adicione arquivos PDF para processar.")
+            if progress_callback:
+                progress_callback(0, 0, "", "nenhum_arquivo")
             return stats
         
         print(f"\nEncontrados {stats['total_files']} arquivos PDF")
         print("-" * 60)
         
-        # Processa em lotes
+        # Processa em lotes com progress callbacks
         for i, file_path in enumerate(files, 1):
-            print(f"\n[{i}/{stats['total_files']}] {file_path.name}")
+            filename = file_path.name
+            print(f"\n[{i}/{stats['total_files']}] {filename}")
+            
+            # Callback: iniciando arquivo
+            if progress_callback:
+                progress_callback(i, stats["total_files"], filename, "lendo")
             
             try:
                 doc_ids = self.process_file(file_path)
@@ -759,12 +882,20 @@ class CognitiveScanner:
                     
                     if len(doc_ids) > 1:
                         stats["combined_files"] += 1
+                    
+                    # Callback: arquivo processado
+                    if progress_callback:
+                        progress_callback(i, stats["total_files"], filename, "ok")
                 else:
                     stats["skipped"] += 1
+                    if progress_callback:
+                        progress_callback(i, stats["total_files"], filename, "skip")
                     
             except Exception as e:
                 stats["errors"] += 1
                 print(f"  [ERRO] {e}")
+                if progress_callback:
+                    progress_callback(i, stats["total_files"], filename, "erro")
         
         # Atualiza estatisticas do banco
         db_stats = self.db.get_statistics()
@@ -784,6 +915,59 @@ class CognitiveScanner:
         print(f"\nDocumentos por entidade:")
         print(f"  Vagner (VG):   {stats['by_entity'].get('VG', 0)}")
         print(f"  Marcelli (MV): {stats['by_entity'].get('MV', 0)}")
+        
+        return stats
+    
+    # ==========================================================================
+    # IMPORTACAO RAPIDA (SEM AI)
+    # ==========================================================================
+    
+    def quick_import(self, progress_callback=None) -> Dict[str, Any]:
+        """
+        Importa PDFs rapidamente SEM processamento de AI.
+        Apenas registra arquivos no banco com status PENDING.
+        """
+        stats = {"total_files": 0, "imported": 0, "skipped": 0, "errors": 0}
+        
+        files = list(self.scan_directory())
+        stats["total_files"] = len(files)
+        
+        if stats["total_files"] == 0:
+            if progress_callback:
+                progress_callback(0, 0, "", "nenhum_arquivo")
+            return stats
+        
+        for i, file_path in enumerate(files, 1):
+            filename = file_path.name
+            
+            if progress_callback:
+                progress_callback(i, stats["total_files"], filename, "importando")
+            
+            try:
+                file_hash = SRDADatabase.calculate_file_hash(str(file_path))
+                if self.db.document_exists(file_hash):
+                    stats["skipped"] += 1
+                    if progress_callback:
+                        progress_callback(i, stats["total_files"], filename, "skip")
+                    continue
+                
+                # Apenas registra - SEM processar AI
+                cursor = self.db.connection.cursor()
+                cursor.execute("""
+                    INSERT INTO documentos 
+                    (original_path, file_hash, doc_type, status, page_start, page_end)
+                    VALUES (?, ?, 'UNKNOWN', 'PENDING', 1, 1)
+                """, (str(file_path), file_hash))
+                self.db.connection.commit()
+                
+                stats["imported"] += 1
+                if progress_callback:
+                    progress_callback(i, stats["total_files"], filename, "ok")
+                    
+            except Exception as e:
+                stats["errors"] += 1
+                if progress_callback:
+                    progress_callback(i, stats["total_files"], filename, "erro")
         
         return stats
 

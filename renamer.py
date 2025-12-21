@@ -30,6 +30,14 @@ from database import (
     MatchType
 )
 
+# Importa supplier matcher para nomes canonicos (fuzzy matching)
+try:
+    from supplier_matcher import match_supplier
+    SUPPLIER_MATCHER_AVAILABLE = True
+except ImportError:
+    match_supplier = None
+    SUPPLIER_MATCHER_AVAILABLE = False
+
 
 # ==============================================================================
 # CONFIGURACOES E CONSTANTES
@@ -209,6 +217,16 @@ class DocumentRenamer:
         
         # Sanitiza
         normalized = DocumentRenamer.sanitize_filename(normalized)
+        
+        # Aplica fuzzy matching para nome canonico (se disponivel)
+        if SUPPLIER_MATCHER_AVAILABLE and match_supplier and normalized:
+            try:
+                match_result = match_supplier(normalized, min_similarity=0.6)
+                if match_result:
+                    canonical, score = match_result
+                    normalized = DocumentRenamer.sanitize_filename(canonical)
+            except:
+                pass
         
         return normalized if normalized else "FORNECEDOR"
     

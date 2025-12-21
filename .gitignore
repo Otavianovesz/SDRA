@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
 
 # Virtual environments
 venv/
@@ -28,6 +29,8 @@ env/
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
@@ -49,3 +52,27 @@ Output/*
 
 # Logs
 *.log
+
+# Test/Validation results (temporary CSV files)
+test_*.csv
+*_results.csv
+baseline_*.csv
+ground_truth.csv
+
+# Test folders
+tests/
+_archive/
+
+# Data folders with documents (too large/private)
+11.2025_NOVEMBRO_1.547/
+NOVEMBRO_COMPROVANTES_N_CONCILIADO/
+
+# Models (too large for git)
+models/
+
+# Test/validation scripts (not core)
+test_*.py
+stress_test.py
+validate_*.py
+analyze_failures.py
+generate_ground_truth.py

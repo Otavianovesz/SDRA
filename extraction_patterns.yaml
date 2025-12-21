@@ -1,0 +1,163 @@
+# SRDA-Rural Extraction Patterns Configuration
+# ============================================
+# This file defines the regex patterns used for extracting data from documents.
+# Format:
+#   field_name:
+#     DOC_TYPE:
+#       - pattern: "regex_string"
+#         confidence: 0.0-1.0
+#         description: "Optional description of what this matches"
+
+# ------------------------------------------------------------------------------
+# DOCUMENT NUMBER PATTERNS
+# ------------------------------------------------------------------------------
+doc_number:
+  # NFE, NFSE, FATURA share patterns
+  NFE:
+    - pattern: 'NF-?[eE]?[\s\n:]*N[°ºo.]?[\s]*([\d\.]+)'
+      confidence: 0.98
+      description: "Standard NF-e Number format"
+
+    - pattern: 'N[úu]mero\s*(?:do)?\s*documento[\s\n:]*(\d{1,9})'
+      confidence: 0.95
+      description: "Explicit 'Número do documento'"
+
+    - pattern: 'N[úu]mero\s*(?:da)?\s*Nota[\s\n:]*(\d{1,9})'
+      confidence: 0.98
+      description: "Common NFSE format 'Número da Nota'"
+
+    - pattern: 'N[úu]mero\s*(?:da)?\s*NFS?-?[eE][\s\n:]*(\d{1,9})'
+      confidence: 0.95
+      description: "Explicit NFS-e number"
+
+    - pattern: 'S[ée]rie\s*\d*[\s\n]*N[°ºo.]?[\s]*([\d\.]+)'
+      confidence: 0.90
+      description: "Series and Number combination"
+
+    - pattern: 'NOTA\s*FISCAL[^\n]*N[°ºo.]?[\s:]*([\d\.]+)'
+      confidence: 0.85
+      description: "Nota Fiscal label"
+
+    # NEW PATTERNS (v38/v39 improvements)
+    - pattern: 'N[úu]mero[\s:]+(\d{3,9})'
+      confidence: 0.92
+      description: "Simple Number label"
+
+    - pattern: 'NOTA\s+(\d{3,9})'
+      confidence: 0.88
+      description: "Direct NOTA X label"
+
+    - pattern: 'NF-?[eE]?[:\s]+([\d\.]+)'
+      confidence: 0.90
+      description: "NFe: Number format"
+
+    - pattern: 'NFS-?e?\s*n[°º]\s*(\d{1,9})'
+      confidence: 0.95
+      description: "NFS-e lowercase n format"
+
+    - pattern: 'N[°º]\s*(?:da)?\s*Nota[\s:]*(\d+)'
+      confidence: 0.90
+      description: "Abbreviated Nº da Nota"
+
+  BOLETO:
+    - pattern: 'Nosso\s*N[°ºu]?(?:mero)?[\s\n:]*([\d\.]+)'
+      confidence: 0.95
+      description: "Nosso Número (Boleto standard)"
+
+    - pattern: 'N[°ºu](?:mero)?\s*(?:do)?\s*Documento[\s\n:]*([\d\.]+)'
+      confidence: 0.90
+      description: "Número do Documento label"
+
+    - pattern: 'Nro\.?\s*Documento[\s\n]+[\d\s-]*([\d]+)(?:/\d)?'
+      confidence: 0.92
+      description: "Sicredi format"
+
+    - pattern: 'Referente\s+aos?\s+Documentos?[\s\n:]*(?:\d+\s+-\s+)?([\d]+)'
+      confidence: 0.88
+      description: "Referente aos Documentos"
+
+    - pattern: 'NF-?\s*(\d{3,9})'
+      confidence: 0.85
+      description: "NF reference in Boleto instructions"
+
+    - pattern: 'REF\.?\s*(?:NF|NOTA)[\s:]*(\d{3,9})'
+      confidence: 0.85
+      description: "Ref NF instruction"
+
+  COMPROVANTE:
+    - pattern: '(?:AUTENTICACAO|Autentica[çc][ãa]o)[\s:]+([A-Z0-9\.\-]+)'
+      confidence: 0.95
+      description: "Bank Authentication Code"
+
+    - pattern: '(?:Documento|DOC)[\s:]+([\d\.\/-]+)'
+      confidence: 0.80
+      description: "Generic Document label"
+
+  GENERIC:
+    - pattern: 'N[°º\.]?[\s]*([\d\.]{4,15})'
+      confidence: 0.50
+      description: "Low confidence generic number search"
+
+# ------------------------------------------------------------------------------
+# SUPPLIER PATTERNS (Regex-based backup to GLiNER)
+# ------------------------------------------------------------------------------
+supplier:
+  NFE:
+    - pattern: 'RECEBEMOS\s+DE\s+([A-Z][A-Z0-9\s\.,\-]+?)\s+(?:OS\s+PRODUTOS|OS\s+SERVICOS)'
+      confidence: 0.98
+      description: "Recebemos de X footer"
+
+    - pattern: 'Identifica[cç][aã]o\s*do\s*emitente[\s\n]+([A-Z][A-Z0-9\s\.\-]+)'
+      confidence: 0.90
+      description: "Identificação do Emitente header"
+
+    - pattern: 'EMITENTE[\s\n:]+([^\n]+)'
+      confidence: 0.85
+      description: "Emitente label"
+
+    - pattern: 'Raz[aã]o\s*[Ss]ocial[\s\n:]+([^\n]+)'
+      confidence: 0.80
+      description: "Razão Social label"
+
+  BOLETO:
+    - pattern: 'Benefici[aá]rio[\s\n]+([A-Z][A-Z0-9\s,\.\-]+?(?:LTDA|EIRELI|ME|EPP|S\.?A\.?))'
+      confidence: 0.97
+      description: "Beneficiário with corporate suffix"
+
+    - pattern: 'Benefici[aá]rio[\s\n]+([A-Z][A-Z0-9\s]+(?:LTDA|ME|EPP)?)'
+      confidence: 0.96
+      description: "Simple Beneficiário label"
+
+    - pattern: 'Benefici[áa]rio\s*:[\s\n]*([A-Z][A-Z0-9\s\.\-]{8,})'
+      confidence: 0.95
+      description: "Beneficiário with colon"
+
+    - pattern: '\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}[\s\n]+([A-Z][A-Z0-9\s\.\-]{8,})'
+      confidence: 0.90
+      description: "CNPJ followed by Name"
+
+    - pattern: 'CEDENTE[\s\n:]+([A-Z][A-Z0-9\s\.\-]{8,})'
+      confidence: 0.85
+      description: "Cedente label (older format)"
+
+  NFSE:
+    - pattern: 'Raz[aã]o\s*[Ss]ocial[\s\n:]+([A-Z][A-Z0-9\s\.\-]+)'
+      confidence: 0.95
+      description: "NFSE Razão Social"
+
+    - pattern: 'PRESTADOR[\s\n]+(?:DE\s+SERVI[ÇC]OS?)?[\s\n:]+([A-Z][A-Z0-9\s\.\-]+)'
+      confidence: 0.90
+      description: "Prestador de Serviços block"
+
+    - pattern: '(?:Nome|Raz[aã]o)\s*(?:do\s*)?Prestador[\s\n:]+([^\n]+)'
+      confidence: 0.85
+      description: "Nome do Prestador label"
+
+  GENERIC:
+    - pattern: 'EMITENTE[\s\n:]+([^\n]+)'
+      confidence: 0.70
+      description: "Generic Emitente label"
+
+    - pattern: 'Raz[aã]o\s*Social[\s\n:]+([^\n]+)'
+      confidence: 0.70
+      description: "Generic Razão Social label"
