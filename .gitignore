@@ -59,8 +59,7 @@ test_*.csv
 baseline_*.csv
 ground_truth.csv
 
-# Test folders
-tests/
+# Archive folder
 _archive/
 
 # Data folders with documents (too large/private)
