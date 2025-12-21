@@ -40,10 +40,32 @@ DEFAULT_BANNED_ENTITIES = {
     # Generic terms that appear in documents
     'EMPRESA DE PEQUENO PORTE', 'EPP', 'MEI', 'PAGADOR', 'SACADO',
     'BENEFICIARIO', 'BENEFICIÁRIO', 'FINAL VENCIME', 'LTDA',
+    'AGENCIA', 'AGÊNCIA', 'CONTA CORRENTE', 'AUTENTICACAO', 'AUTENTICAÇÃO',
+    
+    # ENERGISA - Common OCR hallucination (utility company often misidentified)
+    'ENERGISA', 'ENERGISA MT', 'ENERGISA MATO GROSSO', 'ENERGISA S.A',
+    'ENERGISA DISTRIBUIDORA', 'GRUPO ENERGISA',
+    
+    # BANCOS - NÃO são fornecedores em NFe (aparecem como banco emissor do boleto)
+    'BANCO', 'BRADESCO', 'ITAU', 'ITAÚ', 'SANTANDER', 'CAIXA',
+    'CAIXA ECONOMICA', 'CAIXA ECONOMICA FEDERAL', 'CEF',
+    'BANCO DO BRASIL', 'BB', 'BCO DO BRASIL', 'BCO BRASIL',
+    'SICREDI', 'SICREDI SISTEMA', 'SICOOB', 'BANRISUL',
+    'SAFRA BANCO', 'BANCO SAFRA', 'NUBANK', 'INTER', 'C6 BANK',
+    'BRADESCO S.A', 'ITAU UNIBANCO', 'SANTANDER BRASIL',
+    
+    # Órgãos públicos (geralmente não são prestadores diretos)
+    'PREFEITURA', 'SECRETARIA', 'GOVERNO', 'ESTADO', 'MUNICIPIO',
+    'RECEITA FEDERAL', 'MINISTERIO', 'TRIBUNAL',
+    
+    # Endereços/Locais (OCR noise - NOT supplier names)
+    'RODOVIA', 'AVENIDA', 'RUA', 'ZONA RURAL', 'FAZENDA',
+    'COMARCA', 'CIDADE', 'BAIRRO', 'CENTRO', 'DISTRITO',
+    'KM', 'LOTE', 'QUADRA', 'SETOR',
     
     # OCR ERRORS (common misreads, NOT actual supplier names)
     'INSCRI', 'INSCRICAO', 'INSCRIÇÃO',
-    'IBPT', 'DANF3E', 'FUNTTEL',
+    'IBPT', 'DANF3E', 'FUNTTEL', 'CPF', 'CNPJ', 'ISENTO',
     
     # Specific OCR errors from tests
     'AGROFIBRAMUTUM', 'AGROFIBRAMUTUM LTDA',
@@ -54,12 +76,13 @@ DEFAULT_BANNED_ENTITIES = {
     'TINTA ESM IND',
     'DIEGO CONCENTINO PELLEGRINI',
     
-    # Cross-contamination sources
-    'AUTO ELETRICA SANTA CLARA',  # Appears in unrelated NFSEs
+    # Cross-contamination sources (legitimate OCR false positives)
+    # Note: Do NOT add legitimate suppliers here - check known_suppliers.txt first
     
     # Document terms
     'DOCUMENTO AUXILIAR', 'NOTA FISCAL', 'BOLETO BANCARIO',
-    'NOTA FISCAL ELETRONICA', 'NF-E', 'NFSE',
+    'NOTA FISCAL ELETRONICA', 'NF-E', 'NFSE', 'DANFE',
+    'RECIBO', 'COMPROVANTE', 'FATURA', 'DUPLICATA',
 }
 
 

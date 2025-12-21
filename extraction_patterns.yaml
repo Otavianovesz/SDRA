@@ -89,9 +89,13 @@ doc_number:
       confidence: 0.95
       description: "Bank Authentication Code"
 
-    - pattern: '(?:Documento|DOC)[\s:]+([\d\.\/-]+)'
+    - pattern: 'DOCUMENTO[:\s]+(\d+)'
+      confidence: 0.90
+      description: "BB Document number"
+
+    - pattern: 'ID[:\s]+([A-Z0-9]+)'
       confidence: 0.80
-      description: "Generic Document label"
+      description: "PIX Transaction ID"
 
   GENERIC:
     - pattern: 'N[°º\.]?[\s]*([\d\.]{4,15})'
@@ -120,25 +124,56 @@ supplier:
       description: "Razão Social label"
 
   BOLETO:
-    - pattern: 'Benefici[aá]rio[\s\n]+([A-Z][A-Z0-9\s,\.\-]+?(?:LTDA|EIRELI|ME|EPP|S\.?A\.?))'
+    # SICOOB format: Company name with & symbol after Cedente block
+    - pattern: '([A-Z][A-Z0-9\s,&\.\-]{5,}(?:LTDA|CIA|EIRELI|ME|EPP|S\.?A\.?))\s+\d{4}\s*/\s*\d+'
+      confidence: 0.98
+      description: "Company name followed by Agencia/Codigo pattern"
+
+    # SICREDI format: Beneficiário label followed by company name on new line
+    - pattern: 'Benefici[aá]rio\s*:\s*\n*([A-Z][A-Z0-9\s,&\.\-]+(?:LTDA|EIRELI|ME|EPP)?)'
       confidence: 0.97
+      description: "Beneficiário with colon and newline"
+
+    - pattern: 'Benefici[aá]rio[:\s\n]+([A-Z][A-Z0-9\s,&\.\-]+?(?:LTDA|EIRELI|ME|EPP|S\.?A\.?))'
+      confidence: 0.96
       description: "Beneficiário with corporate suffix"
 
-    - pattern: 'Benefici[aá]rio[\s\n]+([A-Z][A-Z0-9\s]+(?:LTDA|ME|EPP)?)'
-      confidence: 0.96
-      description: "Simple Beneficiário label"
-
-    - pattern: 'Benefici[áa]rio\s*:[\s\n]*([A-Z][A-Z0-9\s\.\-]{8,})'
+    # CNPJ followed by company name pattern
+    - pattern: 'C\.?N\.?P\.?J\.?\s*:?\s*[\d\.\/\-]+\s+([A-Z][A-Z0-9\s,&\.\-]{8,})'
       confidence: 0.95
-      description: "Beneficiário with colon"
+      description: "CNPJ label followed by company name"
 
-    - pattern: '\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}[\s\n]+([A-Z][A-Z0-9\s\.\-]{8,})'
+    # Cedente format (used by SICOOB, Banco do Brasil)
+    - pattern: 'Cedente[:\s\n]+([A-Z][A-Z0-9\s,&\.\-]{8,})'
+      confidence: 0.94
+      description: "Cedente label with multiline support"
+
+    # Pattern to capture company names with & symbol
+    - pattern: '([A-Z][A-Z\s]{3,}\s*&\s*[A-Z][A-Z\s]+(?:LTDA|CIA)?)'
       confidence: 0.90
+      description: "Company with & symbol (e.g., CADORE & CIA)"
+
+    # Fallback: CNPJ line followed by name
+    - pattern: '\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}[\s\n]+([A-Z][A-Z0-9\s\.\-]{8,})'
+      confidence: 0.88
       description: "CNPJ followed by Name"
 
-    - pattern: 'CEDENTE[\s\n:]+([A-Z][A-Z0-9\s\.\-]{8,})'
+  COMPROVANTE:
+    - pattern: 'PAGO\s+PARA[:\s]+(?:[\d\.]+\s+)?([A-Za-z][A-Za-z\s]+)'
+      confidence: 0.98
+      description: "BB PIX Pago Para - beneficiary name"
+
+    - pattern: 'FAVORECIDO[:\s]+([A-Z][A-Z0-9\s\.\-]+)'
+      confidence: 0.97
+      description: "TED/DOC Favorecido field"
+
+    - pattern: 'DESTINATARIO[:\s]+([A-Z][A-Z0-9\s\.\-]+)'
+      confidence: 0.95
+      description: "Destinatário field"
+
+    - pattern: 'NOME[:\s]+([A-Z][A-Z0-9\s\.\-]+)'
       confidence: 0.85
-      description: "Cedente label (older format)"
+      description: "Generic Nome field"
 
   NFSE:
     - pattern: 'Raz[aã]o\s*[Ss]ocial[\s\n:]+([A-Z][A-Z0-9\s\.\-]+)'

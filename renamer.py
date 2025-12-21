@@ -525,6 +525,29 @@ class DocumentRenamer:
                     if row and row['doc_number']:
                         related_numbers.append(row['doc_number'])
             
+            # ====================================================================
+            # CRITICAL: Boleto/Comprovante Number Inheritance from Linked NFE
+            # ====================================================================
+            # Para BOLETO e COMPROVANTE, o número no nome do arquivo deve vir da
+            # NFE vinculada (via grafo), NÃO do OCR do próprio boleto.
+            # Isso garante que: BOLETO_NF1234.pdf refere à nota 1234 corretamente.
+            # ====================================================================
+            effective_doc_number = doc_number
+            effective_related_numbers = related_numbers
+            
+            if doc_type in [DocumentType.BOLETO, DocumentType.COMPROVANTE]:
+                if related_numbers:
+                    # Use the linked NFE number as the PRIMARY document number
+                    # This is the "truth" from the graph
+                    effective_doc_number = related_numbers[0]
+                    # Keep remaining related numbers as secondary references
+                    effective_related_numbers = related_numbers[1:] if len(related_numbers) > 1 else []
+                elif doc_number:
+                    # Orphan Boleto: prefix with "NN" (Nosso Número) to indicate
+                    # this is the bank's "Nosso Número", NOT an NFe reference
+                    effective_doc_number = f"NN{doc_number}"
+                    effective_related_numbers = []
+            
             # Gera o novo nome
             new_name = self.build_filename(
                 doc_type=doc_type,
@@ -532,10 +555,10 @@ class DocumentRenamer:
                 date_str=date_str,
                 supplier=supplier,
                 amount_cents=boleto_amount if boleto_amount else amount,
-                doc_number=doc_number,
+                doc_number=effective_doc_number,
                 nfe_amount_cents=nfe_amount,
                 installment_info=installment_info,
-                related_numbers=related_numbers if doc_type == DocumentType.BOLETO else None
+                related_numbers=effective_related_numbers if doc_type == DocumentType.BOLETO else None
             )
             
             # Define caminho de destino

@@ -303,8 +303,6 @@ class RegexVoter:
             ("BENEFICIARIO", 6),
             ("PAGADOR", 6),
             ("VALOR DO DOCUMENTO", 5),
-            ("BANCO DO BRASIL", 5),
-            ("CAIXA ECONOMICA", 5),
         ],
         DocumentType.NFE: [
             ("DANFE", 15),
@@ -324,10 +322,17 @@ class RegexVoter:
         ],
         DocumentType.COMPROVANTE: [
             ("COMPROVANTE DE PAGAMENTO", 15),
+            ("COMPROVANTE PIX", 18),
+            ("COMPROVANTE TED", 18),
+            ("COMPROVANTE DOC", 18),
+            ("PAGO PARA", 15),
             ("PAGAMENTO EFETUADO", 10),
             ("PIX ENVIADO", 12),
             ("TED ENVIADO", 12),
+            ("AUTENTICACAO SISBB", 15),
             ("AUTENTICACAO MECANICA", 10),
+            ("SOBRE A TRANSACAO", 12),
+            ("CHAVE PIX", 10),
         ],
         DocumentType.APOLICE: [
             ("APOLICE", 15),
@@ -1192,6 +1197,40 @@ class EnsembleExtractor:
 
             result.extraction_sources["emission_date"] = "layout"
 
+    def _extract_number_from_access_key(self, access_key: str) -> Optional[str]:
+        """
+        Extrai o número da NFe/NFCe diretamente da chave de acesso (44 dígitos).
+        
+        DETERMINÍSTICO - 100% preciso para NFe/NFCe.
+        
+        Posições da Chave de Acesso:
+        - UF (2) + AAMM (4) + CNPJ (14) + Mod (2) + Série (3) + NÚMERO (9) + ...
+        - Índices Python: posições 25 a 34 (exclusivo) contêm o número
+        
+        Args:
+            access_key: Chave de acesso de 44 dígitos
+            
+        Returns:
+            Número da nota (sem zeros à esquerda) ou None
+        """
+        if not access_key:
+            return None
+        
+        # Remove espaços e caracteres não numéricos
+        clean_key = re.sub(r'\D', '', access_key)
+        
+        if len(clean_key) != 44:
+            return None
+        
+        try:
+            # Posições 25 a 34 contêm o número (9 dígitos com zeros à esquerda)
+            numero_str = clean_key[25:34]
+            # Remove zeros à esquerda
+            numero_int = int(numero_str)
+            return str(numero_int)
+        except ValueError:
+            return None
+
     def _resolve_financials(
         self,
         full_text: str,
@@ -1201,6 +1240,9 @@ class EnsembleExtractor:
         """
         Resolves Amount, Doc Number, SISBB Auth, Payment Status, and Final Confidence.
         Updates result object in-place.
+        
+        MELHORIA: Para NFE/NFSE, prioriza extração DETERMINÍSTICA via Chave de Acesso
+        ao invés de OCR/Regex probabilístico.
         """
         # 1. Extract Amount
         amount_result = self.regex_voter.extract_amount(full_text)
@@ -1208,18 +1250,33 @@ class EnsembleExtractor:
             result.amount_cents = int(amount_result.value)
             result.extraction_sources["amount"] = amount_result.source
         
-        # 2. Extract Document Number
-        doc_num_result = self.regex_voter.extract_doc_number(full_text, doc_type)
-        if doc_num_result.value:
-            result.doc_number = doc_num_result.value
-            result.extraction_sources["doc_number"] = doc_num_result.source
+        # 2. Extract Access Key first (for NFE, this is the SOURCE OF TRUTH)
+        access_key_match = BrazilianPatterns.ACCESS_KEY.search(full_text)
+        if access_key_match:
+            result.access_key = access_key_match.group(1)
         
-        # 3. SISBB Validation (Banco do Brasil)
+        # 3. Extract Document Number - PRIORIDADE para Chave de Acesso em NFE/NFSE
+        if doc_type in [DocumentType.NFE, DocumentType.NFSE] and result.access_key:
+            # MÉTODO DETERMINÍSTICO: Extrai número da Chave de Acesso
+            derived_number = self._extract_number_from_access_key(result.access_key)
+            if derived_number:
+                result.doc_number = derived_number
+                result.extraction_sources["doc_number"] = "access_key_deterministic"
+                logger.debug(f"Doc number from access key: {derived_number}")
+        
+        # Fallback: Regex/YAML patterns (para BOLETO, COMPROVANTE ou se chave não encontrada)
+        if not result.doc_number:
+            doc_num_result = self.regex_voter.extract_doc_number(full_text, doc_type)
+            if doc_num_result.value:
+                result.doc_number = doc_num_result.value
+                result.extraction_sources["doc_number"] = doc_num_result.source
+        
+        # 4. SISBB Validation (Banco do Brasil)
         sisbb_result = self.regex_voter.extract_sisbb(full_text)
         if sisbb_result.value:
             result.sisbb_auth = sisbb_result.value
         
-        # 4. Determine Payment Status
+        # 5. Determine Payment Status
         result.is_scheduled = self.regex_voter.check_scheduling(full_text)
         
         if result.is_scheduled:
@@ -1229,7 +1286,7 @@ class EnsembleExtractor:
         else:
             result.payment_status = PaymentStatus.UNKNOWN
         
-        # 5. Calculate Final Confidence
+        # 6. Calculate Final Confidence
         result.confidence = self._calculate_confidence(result)
         result.needs_review = result.confidence < 0.6
 
@@ -1299,10 +1356,17 @@ class EnsembleExtractor:
             # ========================================
             # STEP 2: Executa Voters (GLiNER + Layout)
             # ========================================
-            # GLiNER Vote
+            # GLiNER Vote - OTIMIZADO: Usa apenas cabeçalho + rodapé
+            # O meio do documento (lista de itens) confunde o modelo e é irrelevante
             gliner_entities = {}
             if self.gliner_voter:
-                raw_entities = self.gliner_voter.extract_entities(full_text)
+                # Otimização: Concatena primeiros 2000 chars (header) + últimos 1000 chars (footer)
+                # Isso cobre: Fornecedor (cabeçalho), Totais (rodapé), ignora itens (meio)
+                header_text = full_text[:2000]
+                footer_text = full_text[-1000:] if len(full_text) > 2000 else ""
+                optimized_text = header_text + "\n\n" + footer_text
+                
+                raw_entities = self.gliner_voter.extract_entities(optimized_text)
                 # Ensure we have VoterResults with penalty if needed (handled in resolve?)
                 # We'll pass raw entities, _resolve_supplier logic handles specific keys
                 gliner_entities = raw_entities
