@@ -33,11 +33,8 @@ except ImportError:
 
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-# Fixed imports: try modern paths first, fall back to deprecated (Vol I compatibility)
-try:
-    from ttkbootstrap.widgets import ScrolledFrame
-except ImportError:
-    from ttkbootstrap.scrolled import ScrolledFrame
+# Fixed imports: use modern path directly
+from ttkbootstrap.widgets.scrolled import ScrolledFrame
 from ttkbootstrap.dialogs import Messagebox
 try:
     from ttkbootstrap.widgets import ToolTip
@@ -48,6 +45,7 @@ import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 
 # Importa modulos do sistema
+
 from database import (
     SRDADatabase,
     DocumentType,
@@ -56,7 +54,7 @@ from database import (
     MatchType
 )
 from scanner import CognitiveScanner
-from graph_reconciler import GraphReconciler, TransactionIsland
+from mcmf_reconciler import MCMFReconciler, TransactionIsland, DocumentNode
 from renamer import DocumentRenamer
 
 # Configuracao de logging
@@ -104,12 +102,21 @@ DOC_ICONS = {
 # ==============================================================================
 
 class EditDialog(tk.Toplevel):
-    """Dialog para edicao de dados de um documento."""
+    """Dialog para edicao de dados de um documento com Active Learning."""
     
-    def __init__(self, parent, doc_data: Dict[str, Any]):
+    def __init__(self, parent, doc_data: Dict[str, Any], db=None):
         super().__init__(parent)
         self.result = None
         self.doc_data = doc_data
+        self.db = db  # For Active Learning logging
+        
+        # Store original values for correction tracking
+        self._original_values = {
+            'supplier': doc_data.get('supplier_clean', '') or '',
+            'amount_cents': doc_data.get('amount_cents', 0) or 0,
+            'due_date': doc_data.get('due_date', ''),
+            'payment_date': doc_data.get('payment_date', '')
+        }
         
         self.title("Editar Documento")
         self.geometry("450x400")
@@ -190,12 +197,51 @@ class EditDialog(tk.Toplevel):
         except:
             amount_cents = 0
         
-        self.result = {
+        new_values = {
             'supplier': self.entry_supplier.get().strip().upper(),
             'amount_cents': amount_cents,
             'due_date': self._br_to_iso(self.entry_due_date.get()),
             'payment_date': self._br_to_iso(self.entry_payment_date.get()),
         }
+        
+        # Active Learning: Log corrections if values changed
+        if self.db and self.doc_data.get('doc_id'):
+            doc_id = self.doc_data['doc_id']
+            
+            # Check each field for changes
+            if new_values['supplier'] != self._original_values['supplier']:
+                self.db.log_correction(
+                    doc_id=doc_id,
+                    field_name='fornecedor',
+                    ocr_value=self._original_values['supplier'],
+                    user_value=new_values['supplier'],
+                    original_confidence=self.doc_data.get('field_confidence', {}).get('fornecedor'),
+                    extractor_source=self.doc_data.get('extraction_sources', {}).get('fornecedor')
+                )
+                logger.info(f"[ACTIVE LEARNING] Correção de fornecedor registrada: {self._original_values['supplier']} -> {new_values['supplier']}")
+            
+            if new_values['amount_cents'] != self._original_values['amount_cents']:
+                self.db.log_correction(
+                    doc_id=doc_id,
+                    field_name='valor',
+                    ocr_value=str(self._original_values['amount_cents']),
+                    user_value=str(new_values['amount_cents']),
+                    original_confidence=self.doc_data.get('field_confidence', {}).get('valor'),
+                    extractor_source=self.doc_data.get('extraction_sources', {}).get('valor')
+                )
+                logger.info(f"[ACTIVE LEARNING] Correção de valor registrada: {self._original_values['amount_cents']} -> {new_values['amount_cents']}")
+            
+            if new_values['due_date'] and new_values['due_date'] != self._original_values['due_date']:
+                self.db.log_correction(
+                    doc_id=doc_id,
+                    field_name='data_vencimento',
+                    ocr_value=self._original_values['due_date'],
+                    user_value=new_values['due_date'],
+                    original_confidence=self.doc_data.get('field_confidence', {}).get('data_vencimento'),
+                    extractor_source=self.doc_data.get('extraction_sources', {}).get('data_vencimento')
+                )
+        
+        self.result = new_values
         self.destroy()
 
 
@@ -215,10 +261,11 @@ class SRDAApplication:
     """
     
     def __init__(self):
+
         # Componentes do sistema
         self.db = SRDADatabase()
         self.scanner = CognitiveScanner(db=self.db)
-        self.reconciler = GraphReconciler(db=self.db)
+        self.reconciler = MCMFReconciler(db=self.db)
         self.renamer = DocumentRenamer(db=self.db)
         
         # Janela principal (com ou sem DnD)
@@ -328,10 +375,46 @@ class SRDAApplication:
                     parent=self.root
                 )
                 
+
                 if result == "Yes":
-                    self.reconciler.force_link(source_id, target_id, "manual")
+                    # Determine parent vs child based on type
+                    # Parent: BOLETO or COMPROVANTE
+                    # Child: NFE or NFSE
+                    try:
+                        source_id = int(source_id)
+                        target_id = int(target_id)
+                        
+                        # Fetch types from DB for safety
+                        cursor = self.db.connection.cursor()
+                        cursor.execute("SELECT doc_type FROM documentos WHERE id IN (?, ?)", (source_id, target_id))
+                        # We need to reuse the cursor correctly or just assume IDs are valid
+                        # Better: use the helper
+                        
+                        # Helper specific for this check
+                        def is_parent(did):
+                             res = self.db.connection.execute("SELECT doc_type FROM documentos WHERE id=?", [did]).fetchone()
+                             return res[0] in ['BOLETO', 'COMPROVANTE'] if res else False
+
+                        if is_parent(source_id):
+                            self.db.insert_match(source_id, target_id, MatchType.MANUAL, 1.0)
+                        elif is_parent(target_id):
+                            self.db.insert_match(target_id, source_id, MatchType.MANUAL, 1.0)
+                        else:
+                            # Both children or both parents? Arbitrary or fail
+                            # Default to source=parent
+                             self.db.insert_match(source_id, target_id, MatchType.MANUAL, 1.0)
+
+                        # Auto-confirm manual matches
+                        match_res = self.db.connection.execute("SELECT id FROM matches WHERE parent_doc_id=? AND child_doc_id=?", 
+                                                              (source_id, target_id) if is_parent(source_id) else (target_id, source_id)).fetchone()
+                        if match_res:
+                            self.db.confirm_match(match_res[0])
+                            
+                    except Exception as e:
+                        logger.error(f"Manual link error: {e}")
+                        
                     self._refresh_all()
-                    self._set_status(f"Vinculo manual criado: {source_id} -> {target_id}")
+                    self._set_status(f"Vinculo manual criado: {source_id} <-> {target_id}")
         
         self.dragged_item = None
     
@@ -1025,7 +1108,8 @@ class SRDAApplication:
             self._show_no_selection()
             return
         
-        doc = dict(row)
+        columns = [col[0] for col in cursor.description]
+        doc = dict(zip(columns, row))
         
         container = ttk.Frame(self.details_frame)
         container.pack(fill=BOTH, expand=YES, padx=10, pady=10)
@@ -1044,7 +1128,34 @@ class SRDAApplication:
             style = "success" if entity == "VG" else "info"
             ttk.Label(header, text=entity, font=("Helvetica", 14, "bold"), bootstyle=style).pack(side=RIGHT)
         
+
         ttk.Separator(container, orient=HORIZONTAL).pack(fill=X, pady=10)
+        
+        # Tabela de Parcelas (se disponivel)
+        installments = self.db.get_installments_by_nfe(doc_id)
+        if installments:
+            inst_frame = ttk.Labelframe(container, text=f" Parcelas ({len(installments)}) ", padding=5, bootstyle="info")
+            inst_frame.pack(fill=X, pady=(0, 10))
+            
+            # Simple header
+            ttk.Label(inst_frame, text="#", font=("Consolas", 9, "bold")).grid(row=0, column=0, padx=5)
+            ttk.Label(inst_frame, text="Vencimento", font=("Consolas", 9, "bold")).grid(row=0, column=1, padx=5)
+            ttk.Label(inst_frame, text="Valor", font=("Consolas", 9, "bold")).grid(row=0, column=2, padx=5)
+            ttk.Label(inst_frame, text="Status", font=("Consolas", 9, "bold")).grid(row=0, column=3, padx=5)
+            
+            for idx, inst in enumerate(installments):
+                r = idx + 1
+                seq = inst['seq_num']
+                dt = self._iso_to_br(inst['due_date'])
+                val = f"R$ {SRDADatabase.cents_to_display(inst['amount_cents'])}"
+                status = "✅" if inst['reconciled'] else "⭕"
+                
+                ttk.Label(inst_frame, text=f"{seq:02d}", font=("Consolas", 9)).grid(row=r, column=0, padx=5)
+                ttk.Label(inst_frame, text=dt, font=("Consolas", 9)).grid(row=r, column=1, padx=5)
+                ttk.Label(inst_frame, text=val, font=("Consolas", 9)).grid(row=r, column=2, padx=5)
+                ttk.Label(inst_frame, text=status, font=("Consolas", 9)).grid(row=r, column=3, padx=5)
+            
+            ttk.Separator(container, orient=HORIZONTAL).pack(fill=X, pady=10)
         
         # Informacoes
         info_frame = ttk.Frame(container)
@@ -1176,8 +1287,10 @@ class SRDAApplication:
         
         cursor.execute(query)
         
+        columns = [col[0] for col in cursor.description]
+        
         for row in cursor.fetchall():
-            doc = dict(row)
+            doc = dict(zip(columns, row))
             
             doc_type = doc.get('doc_type', 'UNKNOWN')
             icon = DOC_ICONS.get(doc_type, "❓")
@@ -1291,7 +1404,12 @@ class SRDAApplication:
         if not row:
             return
         
-        dialog = EditDialog(self.root, dict(row))
+        # Build doc_data with additional metadata for Active Learning
+        columns = [col[0] for col in cursor.description]
+        doc_data = dict(zip(columns, row))
+        doc_data['doc_id'] = self.selected_doc_id  # Required for corrections logging
+        
+        dialog = EditDialog(self.root, doc_data, db=self.db)
         self.root.wait_window(dialog)
         
         if dialog.result:
@@ -1307,13 +1425,13 @@ class SRDAApplication:
         cursor = self.db.connection.cursor()
         cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
         row = cursor.fetchone()
-        if not row or not os.path.exists(row['original_path']):
+        if not row or not os.path.exists(row[0]):
             Messagebox.showerror("Erro", "Arquivo nao encontrado", parent=self.root)
             return
         
         if Messagebox.yesno("Reprocessar", "Excluir dados atuais e reprocessar?", parent=self.root) == "Yes":
             self._delete_document(self.selected_doc_id)
-            self.scanner.process_file(Path(row['original_path']))
+            self.scanner.process_file(Path(row[0]))
             self._refresh_all()
             self._set_status("Documento reprocessado")
     
@@ -1323,8 +1441,8 @@ class SRDAApplication:
         cursor = self.db.connection.cursor()
         cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
         row = cursor.fetchone()
-        if row and os.path.exists(row['original_path']):
-            os.startfile(row['original_path'])
+        if row and os.path.exists(row[0]):
+            os.startfile(row[0])
     
     def _on_open_folder_click(self):
         if not self.selected_doc_id:
@@ -1332,8 +1450,8 @@ class SRDAApplication:
         cursor = self.db.connection.cursor()
         cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
         row = cursor.fetchone()
-        if row and os.path.exists(row['original_path']):
-            os.startfile(os.path.dirname(row['original_path']))
+        if row and os.path.exists(row[0]):
+            os.startfile(os.path.dirname(row[0]))
     
     def _on_delete_click(self):
         if not self.selected_doc_id:
@@ -1427,26 +1545,104 @@ class SRDAApplication:
         msg = f"✅ Importado: {stats['imported']} novos | {stats['skipped']} existentes | Use 🧠 Processar para extrair dados"
         self.root.after(0, lambda: self._set_status(msg))
     
+
     def _do_match(self):
-        """Reconcilia documentos com feedback visual."""
-        self.root.after(0, lambda: self._set_status("🔗 Construindo grafo de documentos..."))
+        """Reconcilia documentos com feedback visual usando MCMF."""
+        self.root.after(0, lambda: self._set_status("🔗 Preparando dados..."))
         
-        # Constroi grafo
-        self.reconciler.build_graph()
+        # 1. Fetch data
+        docs_data = self.db.get_all_open_documents()
+        nodes = []
+        for d in docs_data:
+            nodes.append(DocumentNode(
+                id=d['id'],
+                doc_type=d['doc_type'],
+                amount_cents=d['amount_cents'] or 0,
+                supplier=d['supplier_clean'],
+                due_date=d['due_date'],
+                payment_date=d['payment_date'],
+                emission_date=d['emission_date'],
+                entity_tag=d['entity_tag'],
+                original_path=d['original_path']
+            ))
+            
+        self.root.after(0, lambda: self._set_status(f"🧮 Maximizando fluxo (MCMF) em {len(nodes)} nós..."))
         
-        self.root.after(0, lambda: self._set_status("🧮 Identificando componentes conexos..."))
+        # 2. Run MCMF
+        islands = self.reconciler.reconcile(nodes)
+        self.current_islands = islands
         
-        # Reconcilia
-        result = self.reconciler.reconcile()
-        self.current_islands = result.islands
+        self.root.after(0, lambda: self._set_status("💾 Persistindo grafo..."))
         
-        self.root.after(0, lambda: self._set_status("💾 Persistindo reconciliação..."))
+        # 3. Persist
+        count_matches = 0
+        try:
+            for island in islands:
+                for edge in island.edges:
+                     # Edge is dict {source, target, weight}
+                     s_id = edge['source']
+                     t_id = edge['target']
+                     
+                     # Find nodes to check types
+                     s_node = next((n for n in island.nodes if n.id == s_id), None)
+                     t_node = next((n for n in island.nodes if n.id == t_id), None)
+                     
+                     if s_node and t_node:
+                         is_p_s = s_node.doc_type in ['BOLETO', 'COMPROVANTE']
+                         # is_p_t = t_node.doc_type in ['BOLETO', 'COMPROVANTE']
+                         
+                         if is_p_s:
+                             self.db.insert_match(s_id, t_id, MatchType.EXACT, 1.0)
+                         else:
+                             self.db.insert_match(t_id, s_id, MatchType.EXACT, 1.0)
+                         count_matches += 1
+            
+            self.db.connection.commit()
+        except Exception as e:
+             logger.error(f"Persistence error: {e}")
         
-        # Persiste
-        self.reconciler.persist_reconciliation(result)
+
+        msg = f"✅ Reconciliado: {len(islands)} ilhas | {count_matches} vínculos gerados pelo Solver"
         
-        msg = f"✅ Reconciliado: {result.total_islands} ilhas | {result.complete_islands} completas | {result.orphan_documents} órfãos"
+        # 4. Post-Match Heuristic: Link Installments
+        # If we matched Boleto to NFE, try to find matching installment
+        try:
+             # Iterate recently created matches (or all confirmed matches from this session)
+             # Efficient way: Re-iterate islands with edges
+             linked_count = 0
+             for island in islands:
+                for edge in island.edges:
+                    s_id = edge['source']
+                    t_id = edge['target']
+                    s_node = next((n for n in island.nodes if n.id == s_id), None)
+                    t_node = next((n for n in island.nodes if n.id == t_id), None)
+                    
+                    if not s_node or not t_node: continue
+
+                    # Identify Parent (Boleto) and Child (NFE)
+                    boleto_node = None
+                    nfe_node = None
+                    
+                    if s_node.doc_type in ['BOLETO', 'COMPROVANTE'] and t_node.doc_type in ['NFE', 'NFSE']:
+                        boleto_node = s_node
+                        nfe_node = t_node
+                    elif t_node.doc_type in ['BOLETO', 'COMPROVANTE'] and s_node.doc_type in ['NFE', 'NFSE']:
+                        boleto_node = t_node
+                        nfe_node = s_node
+                        
+                    if boleto_node and nfe_node:
+                        # Try to link installment
+                        if self.db.link_installment_to_boleto(nfe_node.id, boleto_node.id, boleto_node.amount_cents):
+                            linked_count += 1
+             
+             if linked_count > 0:
+                 msg += f" | {linked_count} parcelas vinculadas"
+                 
+        except Exception as e:
+            logger.error(f"Installment linking error: {e}")
+
         self.root.after(0, lambda: self._set_status(msg))
+        self.root.after(0, self._refresh_all)
     
     def _do_rename(self):
         """Renomeia arquivos com feedback visual."""

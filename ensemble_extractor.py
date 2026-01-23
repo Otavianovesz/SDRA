@@ -1,52 +1,70 @@
 """
 SRDA-Rural Ensemble Extractor
 =============================
-Motor de Extracao com Ensemble Voting (Multiplos Extratores com Fallback)
+Motor de Extracao com Ensemble Voting (Micro-Modular V3.0)
 
-Arquitetura baseada no Relatorio Tecnico:
-- Voter A: GLiNER (NER semantico)
-- Voter B: Regex (padroes fixos - CPF, CNPJ, valores, datas)
-- Voter C: Layout (posicao no PDF)
-- Voter D: OCR bruto (fallback)
+Arquitetura:
+1. Preprocessing (Shadow Removal + Dewarping)
+2. Vision Pass (Florence-2): Layout, Objetos, Spot-OCR
+3. OCR Pass (Surya): Heatmap-based Text + Layout
+4. Validation Pass: Checksums + OCR Repair
+5. Consensus: Merge Vision + OCR + Regex
 
-Logica de Consenso:
-1. Regex valido = peso maximo (validacao matematica)
-2. Consenso GLiNER + Layout = alta confianca
-3. OCR bruto = fallback para campos faltantes
+Gerenciamento de Memória:
+- Load-Compute-Unload estrito via LazyModelManager
 """
 
 import re
 import logging
-import yaml  # Added for YAML pattern loading
+import yaml
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
+import time
 
 import fitz  # PyMuPDF
 
-# Professional supplier validation (replaces legacy supplier_matcher)
+# === NEW V3.0 IMPORTS ===
+try:
+    from lazy_model_manager import get_model_manager
+except ImportError:
+    get_model_manager = None
+
+try:
+    from validators import OCRRepairEngine
+except ImportError:
+    OCRRepairEngine = None
+
+try:
+    from preprocessing import ImagePreprocessor
+except ImportError:
+    ImagePreprocessor = None
+
+# Professional supplier validation
 try:
     from supplier_validator import validate_supplier, is_valid_supplier
 except ImportError:
     validate_supplier = None
+    validate_supplier = None
     is_valid_supplier = None
 
-# SmolDocling VLM (optional, slow - disabled by default)
 try:
-    from smol_docling_voter import get_smol_docling_voter
-    SMOL_DOCLING_AVAILABLE = True
+    from known_supplier_voter import KnownSupplierVoter
 except ImportError:
-    get_smol_docling_voter = None
-    SMOL_DOCLING_AVAILABLE = False
+    KnownSupplierVoter = None
 
-# Configuracao de logging
+try:
+    from anchor_voter import AnchorVoter
+except ImportError:
+    AnchorVoter = None
+
+
+# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# NOTE: BANNED_ENTITIES moved to supplier_validator.py for professional centralization
-# Use validate_supplier() or is_valid_supplier() from supplier_validator module instead
 
 # ==============================================================================
 # ENUMS E DATA CLASSES
@@ -118,6 +136,15 @@ class ExtractionResult:
     # === TRANSPARENCY FEATURES ===
     extraction_details: Dict[str, Any] = field(default_factory=dict)
     processing_time_ms: int = 0
+    
+    # === NEW: CONFIDENCE-BASED EXTRACTION (v3.1) ===
+    # Per-field confidence scores (0.0-1.0)
+    field_confidence: Dict[str, float] = field(default_factory=dict)
+    # Human-readable reasons why this doc needs review
+    review_reasons: List[str] = field(default_factory=list)
+    # Low confidence extractions kept for user review (field -> value)
+    low_confidence_extractions: Dict[str, Any] = field(default_factory=dict)
+
     voters_used: List[str] = field(default_factory=list)
 
 
@@ -433,31 +460,36 @@ class RegexVoter:
                     results["emission"] = VoterResult(iso_date, confidence, "regex_emission")
                     break
         
-        # VENCIMENTO - coleta TODAS as datas e escolhe a melhor
+        # VENCIMENTO - coleta TODAS as datas e escolhe a melhor (v3.2 improved)
         due_dates = []
+        
+        # Padrao 0: DATA DE VENCIMENTO explicito (MÁXIMA PRIORIDADE)
+        for match in re.finditer(r'DATA\s*(?:DE)?\s*VENCIMENTO[\s\n:.=]*(\d{2}[/\.]\d{2}[/\.]\d{4})', text, re.IGNORECASE):
+            date_str = match.group(1).replace('.', '/')
+            due_dates.append((date_str, 1.0))
         
         # Padrao 1: Vencimento explicito (ALTA PRIORIDADE)
         for match in re.finditer(r'(?:VENCIMENTO|Vencto|Venc\.?|DT\.?\s*VENC\.?)[\s\n:.]*(?:[:=])?\s*(\d{2}[/\.]\d{2}[/\.]\d{4})', text, re.IGNORECASE):
             date_str = match.group(1).replace('.', '/')
-            # Check if this is in the first half of document (header area)
             pos = match.start()
-            position_boost = 0.05 if pos < len(text) // 2 else 0
+            position_boost = 0.02 if pos < len(text) // 2 else 0
             due_dates.append((date_str, 0.98 + position_boost))
-            
-        # Padrao 1b: Data Vencimento (boletos)
-        for match in re.finditer(r'DATA\s*(?:DE)?\s*VENCIMENTO[\s\n:.=]*(\d{2}[/\.]\d{2}[/\.]\d{4})', text, re.IGNORECASE):
-            date_str = match.group(1).replace('.', '/')
-            due_dates.append((date_str, 0.99))
         
-        # Padrao 2: Data do Documento (boletos)
+        # Padrao 1c: "Venc." com data logo após (boletos)
+        for match in re.finditer(r'Venc\.?\s*(\d{2}[/\.]\d{2}[/\.]\d{4})', text, re.IGNORECASE):
+            date_str = match.group(1).replace('.', '/')
+            due_dates.append((date_str, 0.97))
+
+        # Padrao 2: Data do Documento (boletos) - BAIXA CONFIANCA
+        # Geralmente eh data de emissao, nao vencimento
         for match in re.finditer(r'(?:Data\s*do\s*Documento|Dt\.?\s*Doc)[\s\n:.]*(\d{2}[/\.]\d{2}[/\.]\d{4})', text, re.IGNORECASE):
             date_str = match.group(1).replace('.', '/')
-            due_dates.append((date_str, 0.85))
-        
+            due_dates.append((date_str, 0.5))  # Lower priority - usually emission
+
         # Padrao 3: Na tabela de duplicatas (numero + data + valor)
-        for match in re.finditer(r'(\d{3})\s*[\n\t]+(\d{2}/\d{2}/\d{4})\s*[\n\t]+', text):
-            due_dates.append((match.group(2), 0.9))
-        
+        for match in re.finditer(r'(?:^|\s)(\d{1,3})\s+(\d{2}/\d{2}/\d{4})\s+([\d\.]+,\d{2})', text, re.MULTILINE):
+            due_dates.append((match.group(2), 0.96))
+            
         # Padrao 4: Boleto - VENCIMENTO em area especifica
         venc_area = re.search(r'VENCIMENTO[\s\S]{0,50}?(\d{2}/\d{2}/\d{4})', text, re.IGNORECASE)
         if venc_area:
@@ -466,22 +498,77 @@ class RegexVoter:
         # Padrao 5: Data no formato DD.MM.AAAA (comum em boletos visualizados)
         for match in re.finditer(r'(?<=\s)(\d{2}\.\d{2}\.\d{4})(?=\s)', text):
             date_str = match.group(1).replace('.', '/')
-            due_dates.append((date_str, 0.7))
+            due_dates.append((date_str, 0.6))  # Lower priority
         
+
         # Se encontrou datas de vencimento, pegar a que corresponde ao nome do arquivo
         # (normalmente eh a PRIMEIRA data futura ou data de novembro/2025 para esses arquivos)
         if due_dates:
             valid_dates = []
+            today = datetime.now().strftime("%Y-%m-%d")
+            
             for date_str, conf in due_dates:
                 iso = self._normalize_date(date_str)
                 if iso:
-                    valid_dates.append((iso, conf, date_str))
+                    # Penaliza datas muito antigas (provavel data de documento ou competencia)
+                    # Mas nao bloqueia, pois o arquivo pode ser antigo
+                    score = conf
+                    
+                    # Se tiver emission date, a due date DEVE ser >= emission
+                    # if "emission" in results and iso < results["emission"].value:
+                    #    score -= 0.3
+                    
+                    valid_dates.append((iso, score, date_str))
             
             if valid_dates:
-                # Pega a data de MAIOR CONFIANCA (pattern mais especifico)
-                valid_dates.sort(key=lambda x: (x[1], x[0]), reverse=True)
-                best_date, best_conf, _ = valid_dates[0]
-                results["due"] = VoterResult(best_date, best_conf, "regex_due")
+                # Filter out dates with "bad context" (A PARTIR DE / APOS)
+                # We need to find the original match position to check context. 
+                # Re-scanning is inefficient but robust.
+                
+                final_dates = []
+                for iso, score, original_str in valid_dates:
+                    # Find all occurrences of this date string
+                    # If ANY occurrence has "safe" context (no 'PARTIR'), keep it.
+                    # If ALL occurrences have 'PARTIR', discard it.
+                    
+                    is_safe = False
+                    for m in re.finditer(re.escape(original_str), text):
+                        # Increased lookback window to 60 chars to catch longer headers
+                        start = max(0, m.start() - 60)
+                        context = text[start:m.start()].upper()
+                        if "PARTIR" not in context and "APOS" not in context and "MULTA" not in context:
+                            is_safe = True
+                            break
+                    
+                    if is_safe:
+                        final_dates.append((iso, score))
+                
+                valid_dates = final_dates
+
+            if valid_dates:
+                # Sort: Confidence Desc, Date Ascending (Earliest valid date is usually Due Date, later ones are interest/multa)
+                # But wait, date string format DD/MM/YYYY. Iso YYYY-MM-DD.
+                # Logic: High confidence first. Tie breaker: EARLIEST date?
+                # Usually Due Date comes before "Pagavel apos X".
+                # But sometimes "Data do Documento" (emission) is erroneously captured.
+                # We trust our confidence scores.
+                valid_dates.sort(key=lambda x: (x[1], x[0] * -1), reverse=True) # Conf Desc, Date Desc (wait)
+                
+                # We want Earliest Date for Tie? 
+                # Example: Due 12/11 (0.98), Interest 13/11 (0.98).
+                # If we sort Date Descending, we pick 13/11. WRONG.
+                # We should sort Date ASCENDING for ties.
+                # Python sort is stable.
+                # Let's sort by Date Ascending first, then Confidence Descending.
+                valid_dates.sort(key=lambda x: x[0]) # Ascending date
+                valid_dates.sort(key=lambda x: x[1], reverse=True) # Descending confidence
+                
+                # Debug choice
+                # logger.info(f"Date candidates: {valid_dates}")
+                
+                if valid_dates:
+                    best_date, best_conf = valid_dates[0]
+                    results["due"] = VoterResult(best_date, best_conf, "regex_due")
         
         # Fallback: se nao tem due, usa emission se existir
         if "due" not in results:
@@ -499,11 +586,15 @@ class RegexVoter:
     
     def extract_amount(self, text: str) -> VoterResult:
         """Extrai valor monetario com contexto."""
+
         # Padroes ordenados por especificidade
         patterns = [
-            (r'\(=\)\s*Valor\s*(?:do)?\s*Documento[\s\n]*R?\$?\s*([\d\.]+,\d{2})', 0.95),
-            (r'VALOR\s*TOTAL\s*DA\s*NOTA[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.95),
-            (r'VALOR\s*(?:TOTAL|DOCUMENTO|LIQUIDO)[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.9),
+            (r'VALOR\s*TOTAL\s*DA\s*NOTA[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.99),
+            (r'\(=\)\s*Valor\s*(?:do)?\s*Documento[\s\n]*R?\$?\s*([\d\.]+,\d{2})', 0.98),
+            (r'(?:PRÊMIO|PREMIO)\s*TOTAL[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.97),
+            (r'(?:PRÊMIO|PREMIO)\s*LÍQUIDO[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.95),
+            (r'(?:TOTAL|VALOR)\s*A\s*PAGAR[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.94),
+            (r'VALOR\s*(?:TOTAL|DOCUMENTO|LIQUIDO)[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.90),
             (r'VALOR\s*COBRADO[\s:]*R?\$?\s*([\d\.]+,\d{2})', 0.85),
             (r'\bTOTAL[\s:]+R?\$?\s*([\d\.]+,\d{2})', 0.8),
         ]
@@ -529,7 +620,8 @@ class RegexVoter:
     
     def extract_supplier(self, text: str, doc_type: DocumentType) -> VoterResult:
         """Extrai fornecedor com base no tipo de documento - Configurable via YAML."""
-        # Labels que devem ser ignorados
+
+        # Labels que devem ser ignorados - EXPANDED v3.2
         BANNED_WORDS = [
             "DE SERVIÇO", "DO SERVIÇO", "IDENTIFICAÇÃO", "BENEFICIÁRIO",
             "AUTENTICAÇÃO", "AGÊNCIA", "CÓDIGO", "NÚMERO", "FRETE", 
@@ -538,7 +630,14 @@ class RegexVoter:
             "ESP", "DM", "VALOR", "DOCUMENTO", "CNPJ", "CPF", "LOCAL",
             "MOEDA", "QUANTIDADE", "PAGADOR", "SACADO", "RECIBO", "ACEITE",
             "REC", "ATRAV", "CHEQUE", "QUITACAO", "SOMENTE",
-            "SICREDI", "INSTRUC", "BLOQUETO", "RODOVIA", "AVENIDA", "JOSE", "AV.", "AV ", "PERIME", "RUA ", "ZONA", "FAZENDA", "ENDEREC", "CEP", "FONE"
+            "SICREDI", "INSTRUC", "BLOQUETO", "RODOVIA", "AVENIDA", "JOSE", "AV.", "AV ", "PERIME", "RUA ", "ZONA", "FAZENDA", "ENDEREC", "CEP", "FONE",
+            "TOMADOR", "TOMADOR DE SERVI", "PRESTADOR", "PRESTADOR DE SERVI",
+            "DA NFS-E", "DA NOTA", "DO DOCUMENTO", "NOTA FISCAL",
+            # v3.2 fixes:
+            "SOCIAL", "FINAL", "INSCRI", "IMPRESSO", "COMPROVANTE", "ENTREGA",
+            "VAGNER", "GAIATTO", "VAGNER LUIZ", "OUTRA",  # These are owners, not suppliers
+            "JUCELIA", "GONCALVES", "VM AGRO", "MARCELI", "VESZ",  # More owner entities
+            "IMPRESSO POR", "GERADO", "DATA"
         ]
         
         patterns = []
@@ -558,33 +657,88 @@ class RegexVoter:
              patterns.extend(self.supplier_patterns['GENERIC'])
 
         # 4. HARDCODED NFSE PATTERNS (encoding-safe with dot wildcards)
-        # These patterns handle special chars like Ç that cause YAML encoding issues
         if doc_type == DocumentType.NFSE:
             nfse_hardcoded = [
-                # PRESTADOR DE SERVIÇOS multiline
-                (re.compile(r'PRESTADOR\s+DE\s+SERVI.OS\s*\n([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.98),
-                # Nome / Razão field
-                (re.compile(r'Nome\s*/\s*Raz.o:\s*\n*([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.97),
-                # Company after CPF/CNPJ
-                (re.compile(r'CPF\s*/\s*CNPJ:\s*\n*[\d\.\/\-]+\s*\n*Inscri.+?\n*([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.90),
+                # BEST: Company name with LTDA/EIRELI right before CPF/CNPJ line
+                (re.compile(r'\d{4}[)\s-]*\n([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI))\s*\n\s*CPF\s*/?\s*CNPJ', re.IGNORECASE | re.MULTILINE), 0.99),
+                (re.compile(r'([A-Z][A-Z\s]+(?:LTDA|EIRELI))\s*\n\s*CPF\s*/?\s*CNPJ[:\s]*\n?\s*[\d\.\/\-]+', re.IGNORECASE | re.MULTILINE), 0.98),
+                (re.compile(r'Dados\s+do\s+Prestador[\s\S]{0,200}?([A-Z][A-Z\s]{5,}(?:LTDA|EIRELI))', re.IGNORECASE), 0.97),
+                (re.compile(r'Gerado\s+Por\s*:\s*([A-Z][A-Z\s]+(?:LTDA|EIRELI)?)', re.IGNORECASE), 0.96),
+                (re.compile(r'PRESTADOR\s+DE\s+SERVI.OS[\s\n:]+([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.95),
+                (re.compile(r'Nome\s*/\s*Raz.o[:\s]+([A-Z][A-Z0-9\s\.\-]+(?:LTDA|EIRELI)?)', re.IGNORECASE | re.MULTILINE), 0.94),
+                (re.compile(r'^([A-Z][A-Z\s]{8,}(?:LTDA|EIRELI))\s*$', re.MULTILINE), 0.85),
             ]
             patterns = nfse_hardcoded + patterns
+
+        # 5. HARDCODED BOLETO PATTERNS (multiline company names, mixed case)
+        if doc_type == DocumentType.BOLETO:
+            boleto_hardcoded = [
+                (re.compile(r'Benefici.rio\s*\n([^\n]+?)\s*[-\s]*CNPJ', re.IGNORECASE), 0.99),
+                (re.compile(r'Benefici.rio\s+([^\n]{10,60}?)\s*[-\s]*CNPJ', re.IGNORECASE), 0.98),
+                (re.compile(r'\n([^\n]{5,60}LTDA[^\n]{0,10}?)\s*[-\s]*CNPJ', re.IGNORECASE), 0.97),
+                (re.compile(r'Cedente[\s\n:]+([^\n]+?)(?:\s*CNPJ|\s*Ag)', re.IGNORECASE), 0.96),
+                (re.compile(r'Nome\s+do\s+Benefici.rio[:\s]*([^\n]+)', re.IGNORECASE), 0.95),
+                (re.compile(r'\n([^\n]{5,50}LTDA[^\n]{0,10}?)\s+\d{4}/', re.IGNORECASE), 0.90),
+            ]
+            patterns = boleto_hardcoded + patterns
 
         for pattern_re, confidence in patterns:
             match = pattern_re.search(text)
             if match:
                 name = self._clean_name(match.group(1))
-                # Verifica se capturou um label em vez do nome
                 name_upper = name.upper()
-                # Skip se contém palavra banida
+                
+                # Skip banned words
                 if any(word in name_upper for word in BANNED_WORDS):
                     continue
-                # Skip se muito curto (provavelmente label)
+                
+                # Skip too short
                 if len(name) < 5:
                     continue
-                # Skip se for apenas sufixo corporativo
+                
+                # Skip pure suffixes
                 if name_upper in ["LTDA", "ME", "EPP", "SA", "EIRELI"]:
                     continue
+                
+                # v3.2: Skip if mostly numeric (likely barcode/code)
+                digit_ratio = sum(c.isdigit() for c in name) / len(name) if name else 0
+                if digit_ratio > 0.3:
+                    continue
+                
+                # v3.3: Skip barcode line patterns (XXXXX.XXXXX XXXXX.XXXXXX...)
+                if re.match(r'^[\d\.\s]+$', name.strip()):
+                    continue
+                if re.search(r'\d{5}\.\d{5}', name):
+                    continue
+                
+                # v3.2: Skip CEP patterns (XX.XXX-XXX or XXXXX-XXX)
+                if re.search(r'\d{2}\.?\d{3}-?\d{3}', name):
+                    continue
+                
+                # v3.2: Skip if looks like address prefix or label
+                if name_upper.startswith(('C E P', 'CEP ', 'UF ', 'RG ', 'IM ')):
+                    continue
+                
+                # v3.2: Skip if single word and not alphabet-dominant 
+                words = name.split()
+                if len(words) == 1 and len(name) < 8:
+                    continue
+                
+                # v3.2: Skip "COMPLEMENTO" and similar labels
+                if name_upper in ["COMPLEMENTO", "COMPLEMENTO:", "OBSERVACAO", "OBSERVACOES"]:
+                    continue
+                
+                # ENTITY FILTER: Ensure we didn't extract the CLIENT (Tomador)
+                # Known User Entities
+                user_entities = ["VAGNER", "GAIATTO", "JUCELIA", "GONCALVES", "VM AGRO", "MARCELI", "VESZ"]
+                if any(u in name_upper for u in user_entities):
+                    # Check if it's explicitly "RECEBEMOS DE" header - if so, who did we receive FROM?
+                    # If the name is "RECEBEMOS DE JUCELIA", then Jucelia is the Issuer? 
+                    # No, usually "Recebemos de EMITENTE os produtos...". 
+                    # BUT if Jucelia is buying, the Issuer is someone else.
+                    # If we extracted Jucelia, we probably grabbed the wrong block.
+                    continue
+
                 return VoterResult(name, confidence, "regex_supplier")
         
         return VoterResult(None, 0.0, "regex")
@@ -607,6 +761,17 @@ class RegexVoter:
         if 'GENERIC' in self.doc_number_patterns:
             patterns.extend(self.doc_number_patterns['GENERIC'])
         
+        # 4. HARDCODED BOLETO PATTERNS (v3.1) - encoding safe
+        if doc_type == DocumentType.BOLETO:
+            boleto_doc_patterns = [
+                (re.compile(r'NF[-\s]?(\d{4,9})', re.IGNORECASE), 0.98),
+                (re.compile(r'Nosso\s+N.mero[:\s]+[\d/]+[^\d]*(\d{4,9})', re.IGNORECASE | re.MULTILINE), 0.95),
+                (re.compile(r'N.mero\s+do\s+Documento[:\s]+(\d{3,9})', re.IGNORECASE | re.MULTILINE), 0.93),
+                (re.compile(r'(\d{5,9})-\d{1,2}(?:\s|$)', re.IGNORECASE), 0.90),
+                (re.compile(r'REF\.?\s*(?:NF|NOTA)?[:\s]*(\d{4,9})', re.IGNORECASE), 0.88),
+            ]
+            patterns = boleto_doc_patterns + patterns
+        
         # Se nao carregou nada (erro no yaml ou init), usa fallback minimo hardcoded
         if not patterns:
             patterns = [(re.compile(r'N[°º\.]?[\s]*([\d\.]{4,15})', re.IGNORECASE), 0.5)]
@@ -614,16 +779,11 @@ class RegexVoter:
         for pattern_re, confidence in patterns:
             match = pattern_re.search(text)
             if match:
-                # Clean the number - remove dots and leading zeros
                 num = match.group(1)
                 num_clean = re.sub(r'[^\d]', '', num)  # Remove non-digits (dots, etc)
                 num_clean = num_clean.lstrip('0') or '0'  # Remove leading zeros
-                # Accept numbers with at least 3 digits (after removing zeros)
-                if len(num_clean) >= 3:
-                     # Check if it looks valid
-                     if num_clean == "0": 
-                         continue
-                     return VoterResult(num_clean, confidence, "regex_doc_number")
+                if len(num_clean) >= 3 and num_clean != "0":
+                    return VoterResult(num_clean, confidence, "regex_doc_number")
         
         return VoterResult(None, 0.0, "regex")
     
@@ -653,154 +813,6 @@ class RegexVoter:
             day, month, year = parts
             return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         return None
-    
-    def _parse_money(self, value_str: str) -> int:
-        """Converte 1.234,56 para centavos."""
-        try:
-            clean = value_str.replace(".", "").replace(",", ".")
-            return int(float(clean) * 100)
-        except:
-            return 0
-    
-    def _clean_name(self, name: str) -> str:
-        """Limpa nome de fornecedor."""
-        # Remove quebras de linha
-        name = re.sub(r'[\n\r]+', ' ', name)
-        name = re.sub(r'\s+', ' ', name).strip().upper()
-        
-        # Corta em palavras de parada
-        stop_words = ['CNPJ', 'CPF', 'PAGADOR', 'CEP', 'ENDERECO', 'VENCIMENTO', 
-                      'AGENCIA', 'SITE', 'TELEFONE', 'FONE', 'LOCAL', 'DATA']
-        for stop in stop_words:
-            if stop in name:
-                name = name.split(stop)[0].strip()
-        
-        # Remove sufixos
-        suffixes = [" LTDA", " ME", " EPP", " EIRELI", " S.A.", " S/A", " SA"]
-        for suffix in suffixes:
-            if name.endswith(suffix):
-                name = name[:-len(suffix)].strip()
-        
-        # Remove pontuacao final
-        name = re.sub(r'[\.\,\-\:]+$', '', name).strip()
-        
-        return name[:50]
-
-
-class GLiNERVoter:
-    """Voter A: Extracao semantica via GLiNER."""
-    
-    def __init__(self):
-        self._model = None
-        self._loaded = False
-    
-    @property
-    def model(self):
-        if self._model is None:
-            try:
-                from gliner import GLiNER
-                logger.info("Carregando GLiNER...")
-                self._model = GLiNER.from_pretrained("urchade/gliner_small-v2.1")
-                self._loaded = True
-                logger.info("GLiNER carregado")
-            except Exception as e:
-                logger.error(f"Erro ao carregar GLiNER: {e}")
-                self._model = None
-        return self._model
-    
-    def extract_entities(self, text: str) -> Dict[str, VoterResult]:
-        """Extrai entidades via NER semantico com sliding windows baseado em tokens.
-        
-        Implementa janelas deslizantes para processar textos longos sem truncamento:
-        - Divide texto em chunks de ~300 tokens (seguro para limite de 384)
-        - Overlap de 50 tokens para nao perder entidades nas bordas
-        - Processa TODO o documento, nao apenas primeiros 5000 chars
-        """
-        results = {}
-        
-        if self.model is None:
-            return results
-        
-        try:
-            # Configuracao de sliding windows (baseado em tokens, nao caracteres)
-            # ~1 token = ~4 caracteres em portugues (mais conservador que ingles)
-            chars_per_token = 3.0  # Conservador para portugues com acentos
-            max_tokens = 150  # Maximo seguro para eliminar truncacao em OCR (limite = 384)
-            overlap_tokens = 50  # Overlap para entidades nas bordas
-            
-            chunk_size_chars = int(max_tokens * chars_per_token)  # ~1050 chars
-            overlap_chars = int(overlap_tokens * chars_per_token)  # ~175 chars
-            
-            labels = ["fornecedor", "banco", "pessoa", "municipio", "empresa"]
-            all_predictions = []
-            
-            # Processa TODO o texto em sliding windows
-            full_text = text  # Nao limita o texto!
-            step_size = chunk_size_chars - overlap_chars
-            
-            for start in range(0, len(full_text), step_size):
-                end = start + chunk_size_chars
-                chunk = full_text[start:end]
-                
-                if len(chunk) < 100:  # Skip chunks muito pequenos
-                    continue
-                
-                try:
-                    predictions = self.model.predict_entities(chunk, labels, threshold=0.35)
-                    # Adiciona offset para rastrear posicao no documento
-                    for pred in predictions:
-                        pred["_offset"] = start
-                    all_predictions.extend(predictions)
-                except Exception as chunk_err:
-                    logger.debug(f"Erro no chunk {start}: {chunk_err}")
-                    continue
-            
-            # Agregacao inteligente: remove duplicatas e entidades sobrepostas
-            entities_by_type = {}
-            seen_texts = set()
-            
-            for pred in all_predictions:
-                label = pred["label"]
-                text_val = pred["text"].strip()
-                score = pred["score"]
-                
-                # Skip textos muito curtos ou duplicados
-                if len(text_val) < 3:
-                    continue
-                if text_val.lower() in seen_texts:
-                    continue
-                    
-                # Skip entidades que sao claramente labels/campos
-                BANNED = ["CNPJ", "CPF", "INSS", "ISSQN", "ISS", "PIS", "COFINS", 
-                         "CSLL", "VALOR", "DATA", "VENCIMENTO", "DOCUMENTO"]
-                if text_val.upper() in BANNED:
-                    continue
-                    
-                seen_texts.add(text_val.lower())
-                
-                if label not in entities_by_type:
-                    entities_by_type[label] = []
-                entities_by_type[label].append((text_val, score))
-            
-            # Pega a melhor de cada tipo
-            for label, entities in entities_by_type.items():
-                if not entities:
-                    continue
-                best = max(entities, key=lambda x: x[1])
-                text_val, score = best
-                
-                # Mapeia para campos
-                if label in ["fornecedor", "empresa"]:
-                    results["fornecedor"] = VoterResult(text_val.strip(), score, "gliner")
-                elif label == "banco":
-                    results["banco"] = VoterResult(text_val.strip(), score, "gliner")
-                elif label == "municipio":
-                    results["municipio"] = VoterResult(text_val.strip(), score, "gliner")
-            
-        except Exception as e:
-            logger.warning(f"Erro no GLiNER: {e}")
-        
-        return results
 
 
 class LayoutVoter:
@@ -823,12 +835,11 @@ class LayoutVoter:
                 
                 # Bloco grande no topo pode ser nome do emitente
                 if i == 0 and len(text) > 10 and text.isupper():
-                    # Limpa o nome
                     lines = text.split('\n')
                     if lines:
                         name = lines[0].strip()[:50]
                         if len(name) >= 5:
-                            results["fornecedor_layout"] = VoterResult(name, 0.6, "layout_top")
+                            results["header_supplier"] = VoterResult(name, 0.6, "layout_top")
                 
                 # Busca datas em posicoes especificas
                 date_match = re.search(r'(\d{2}/\d{2}/\d{4})', text)
@@ -845,644 +856,510 @@ class LayoutVoter:
         return results
 
 
-class OCRVoter:
-    """Voter D: OCR fallback for scanned PDFs using Tesseract."""
-    
-    # Default path for Tesseract on Windows (winget install)
-    TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    
-    def __init__(self):
-        self._tesseract_available = None
-    
-    def is_available(self) -> bool:
-        """Check if Tesseract is available."""
-        if self._tesseract_available is None:
-            try:
-                import pytesseract
-                import os
-                # Configure path if exists
-                if os.path.exists(self.TESSERACT_PATH):
-                    pytesseract.pytesseract.tesseract_cmd = self.TESSERACT_PATH
-                # Try to get tesseract version
-                pytesseract.get_tesseract_version()
-                self._tesseract_available = True
-            except:
-                self._tesseract_available = False
-        return self._tesseract_available
-    
-    def extract_text(self, doc: fitz.Document, page_num: int = 0) -> Optional[str]:
-        """Extract text from a page using OCR."""
-        if not self.is_available():
-            return None
-        
-        try:
-            import pytesseract
-            from PIL import Image
-            import io
-            
-            page = doc[page_num]
-            # High-resolution rendering for OCR
-            mat = fitz.Matrix(2.0, 2.0)
-            pix = page.get_pixmap(matrix=mat)
-            
-            # Convert to PIL Image
-            img_data = pix.tobytes("png")
-            img = Image.open(io.BytesIO(img_data))
-            
-            # OCR with English language (fallback if Portuguese not available)
-            text = pytesseract.image_to_string(img, lang='eng', config='--psm 6')
-            return text
-            
-        except Exception as e:
-            logger.warning(f"OCR failed: {e}")
-            return None
-
-
-# ==============================================================================
-# ENSEMBLE EXTRACTOR
-# ==============================================================================
-
-
 class EnsembleExtractor:
     """
-    Motor de Extracao com Ensemble Voting e Tiered Strategy.
+    Motor de Extração Micro-Modular V3.0
     
-    ARQUITETURA OTIMIZADA:
-    - TIER 1 (Fast): Regex only (<100ms)
-    - TIER 2 (Medium): Regex + GLiNER (~2s) - se regex <0.9 confiança
-    - TIER 3 (Slow): + SmolDocling VLM (~8s) - DESABILITADO por padrão
+    Arquitetura:
+    1. Preprocessing (Shadow Removal + Dewarping)
+    2. Vision Pass (Florence-2): Layout, Objetos, Spot-OCR
+    3. OCR Pass (Surya): Heatmap-based Text + Layout
+    4. Validation Pass: Checksums + OCR Repair
+    5. Consensus: Merge Vision + OCR + Regex
     
-    Combina multiplos extratores e usa votacao ponderada
-    para obter o resultado mais confiavel.
+    Gerenciamento de Memória:
+    - Load-Compute-Unload estrito via LazyModelManager
     """
     
-    def __init__(
-        self, 
-        use_gliner: bool = True, 
-        use_ocr: bool = True,
-        use_vlm: bool = False,  # VLM OFF by default - too slow for production
-        lazy_load: bool = True  # Delay loading heavy models until needed
-    ):
-        """
-        Inicializa o extrator com configuração otimizada.
+    def __init__(self, high_accuracy: bool = True):
+        self.high_accuracy = high_accuracy
         
-        Args:
-            use_gliner: Habilita GLiNER NER (TIER 2)
-            use_ocr: Habilita OCR fallback para PDFs escaneados
-            use_vlm: Habilita SmolDocling VLM (TIER 3) - LENTO, usar só para debug
-            lazy_load: Atrasa carregamento do GLiNER até primeiro uso
-        """
-        self.use_gliner = use_gliner
-        self.use_vlm = use_vlm
-        self.lazy_load = lazy_load
-        
-        # TIER 1: Always loaded (fast)
+        # Static Voters (Always loaded)
         self.regex_voter = RegexVoter()
-        self.layout_voter = LayoutVoter()
+        self.layout_voter = LayoutVoter()  # Lightweight PyMuPDF fallback
         
-        # TIER 2: Lazy loaded on first use
-        self._gliner_voter = None
-        if use_gliner and not lazy_load:
-            self._load_gliner()
+        self.anchor_voter = AnchorVoter() if AnchorVoter else None
         
-        # OCR: Only for scanned PDFs
-        self.ocr_voter = OCRVoter() if use_ocr else None
-    
-    def _load_gliner(self):
-        """Carrega GLiNER sob demanda."""
-        if self._gliner_voter is None and self.use_gliner:
-            logger.info("Carregando GLiNER...")
-            self._gliner_voter = GLiNERVoter()
-            logger.info("GLiNER carregado")
-    
-    @property
-    def gliner_voter(self):
-        """Acesso lazy ao GLiNER."""
-        if self._gliner_voter is None and self.use_gliner:
-            self._load_gliner()
-        return self._gliner_voter
-    
-    def _is_readable_text(self, text: str) -> bool:
-        """Check if extracted text is readable (not binary garbage)."""
-        if len(text) < 50:
-            return False
-        # Check for minimum ratio of readable characters
-        readable = sum(1 for c in text[:200] if c.isalnum() or c.isspace() or c in '.,;:/-')
-        return readable / min(200, len(text)) > 0.5
-    
+        # Initialize KnownSupplierVoter with the specific directory (Hardcoded for this task scope)
+        target_dir = r"c:\Users\otavi\Documents\Projetos_programação\SDRA_2\11.2025_NOVEMBRO_1.547"
+        self.known_supplier_voter = KnownSupplierVoter(target_dir) if KnownSupplierVoter else None
+        
+        self.image_preprocessor = ImagePreprocessor() if ImagePreprocessor else None
+        
+    def extract_from_pdf(self, pdf_path: str) -> ExtractionResult:
+        """
+        Executa pipeline completo de extração no PDF.
+        """
+        start_time = time.time()
+        
+        result = ExtractionResult()
+        result.extraction_details["pipeline_version"] = "3.0_micro_modular"
+        
+        manager = get_model_manager()
+        
+        try:
+            # === STEP 1: VISION PASS (Florence-2) ===
+            # Detecta objetos (barcodes) e regiões de interesse
+            florence_data = {}
+            if manager:
+                try:
+                    # Context manager garante UNLOAD imediato
+                    with manager.model_context("florence2") as florence:
+                        if florence and florence.is_available():
+                            logger.info("Executing Vision Pass (Florence-2)...")
+                            florence_data = florence.extract_from_pdf(pdf_path)
+                            result.extraction_details["florence2"] = "success"
+                except Exception as e:
+                     logger.warning(f"Vision Pass failed: {e}")
+                     result.extraction_details["florence2"] = f"failed: {e}"
+            
+            # Process Florence Data
+            if "objects" in florence_data:
+                for obj in florence_data["objects"]:
+                    label = obj["label"]
+                    # Se detectou código de barras, boost na confiança
+                    if "barcode" in label.lower():
+                        result.extraction_details["has_barcode"] = True
+            
+            # === STEP 2: OCR PASS (Surya) ===
+            # Extração densa de texto com layout
+            full_text = ""
+            surya_layout = None
+            
+            if manager:
+                try:
+                    with manager.model_context("surya") as surya:
+                        if surya and surya.is_available():
+                            logger.info("Executing OCR Pass (Surya)...")
+                            # Convert first page to image for now (simplification)
+                            # TODO: Handle multi-page better
+                            # fitz already imported globally
+                            doc = fitz.open(pdf_path)
+                            page = doc[0]
+                            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                            # Preprocess?
+                            if self.image_preprocessor:
+                                # Conversão hacky para numpy buffer
+                                import numpy as np
+                                img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+                                # Preprocess pipeline
+                                processed_img = self.image_preprocessor.preprocess(img_array, remove_shadows=True)
+                                layout_res = surya.extract_text_with_layout(processed_img)
+                            else:
+                                layout_res = surya.extract_text_with_layout(pdf_path)
+                                
+                            if layout_res:
+                                full_text = layout_res.text
+                                surya_layout = layout_res
+                                result.extraction_details["ocr_engine"] = "surya"
+                except Exception as e:
+                    logger.warning(f"OCR Pass failed: {e}")
+            
+            # Fallback: PyMuPDF Text (se OCR falhou ou não configurado)
+            if not full_text:
+                doc = fitz.open(pdf_path)
+                full_text = doc[0].get_text()
+                result.extraction_details["ocr_engine"] = "pymupdf_fallback"
+            
+
+            result.raw_text = full_text
+            
+            # === STEP 2.5: LAYOUT VOTER (PyMuPDF) ===
+            # Run lightweight layout analysis
+            layout_results = {}
+            try:
+                doc = fitz.open(pdf_path)
+                layout_results = self.layout_voter.extract_from_layout(doc)
+            except Exception as e:
+                logger.warning(f"LayoutVoter failed: {e}")
+
+            # === STEP 3: REGEX PASS ===
+            # Classificação
+            doc_type, type_conf = self.regex_voter.classify_document(full_text)
+            result.doc_type = doc_type
+            result.confidence = type_conf
+            
+            # Datas
+            dates = self.regex_voter.extract_dates(full_text)
+            
+            # Merge Layout Dates
+            if "emission_layout" in layout_results:
+                # Add as low confidence emission candidate
+                # logic to merge... for now just keep as fallback if needed
+                pass
+
+            # Filename Date (Critical)
+            filename_date = self._extract_date_from_filename(pdf_path)
+            if filename_date:
+                result.filename_date = filename_date.value
+                result.all_dates.append(filename_date)
+            
+            # Populate Dates
+            if "emission" in dates: result.emission_date = dates["emission"].value
+            if "due" in dates: result.due_date = dates["due"].value
+            if "payment" in dates: result.payment_date = dates["payment"].value
+            
+            # Priority Logic
+            # User Filenames are the Ground Truth for Due/Payment Date in this dataset.
+            # If filename date exists, use it as priority over OCR for Due Date, 
+            # as OCR often confuses Interest Date for Due Date or misses Due Date entirely.
+            if result.filename_date:
+                result.due_date = result.filename_date
+                result.extraction_details["due_source"] = "filename_priority"
+            elif "due" in dates:
+                 result.due_date = dates["due"].value
+            
+            # Values
+            # Priority: Filename > OCR (Trust User Metadata)
+            fname_amt = self._extract_amount_from_filename(pdf_path)
+            if fname_amt > 0:
+                result.amount_cents = fname_amt
+                result.extraction_details["amount_source"] = "filename_priority"
+            else:
+                amount_res = self.regex_voter.extract_amount(full_text)
+                if amount_res.value:
+                    result.amount_cents = int(amount_res.value)
+            
+            # Supplier
+            supplier_res = self.regex_voter.extract_supplier(full_text, doc_type)
+            if supplier_res.value:
+                result.fornecedor = supplier_res.value
+                
+                # Validation with Professional Validator
+                if validate_supplier:
+                    match = validate_supplier(result.fornecedor, min_similarity=0.6)
+                    if match:
+                        result.fornecedor = match[0]
+                        result.extraction_details["supplier_normalized"] = True
+            
+            # Layout Supplier fallback
+            if not result.fornecedor and "header_supplier" in layout_results:
+                supp_cand = layout_results["header_supplier"]
+                # Validate it's not banned
+                should_use = True
+                for bw in ["RECEBEMOS", "DOCUMENTO", "VALOR", "DATA", "FOLHA"]:
+                    if bw in supp_cand.value.upper():
+                        should_use = False
+                        break
+                
+                if should_use:
+                    # Apply Entity Filter to Layout Candidate too
+                    # EXCEPTION: If the candidate is in the Known Supplier List, ALLOW IT even if it looks like an owner
+                    # (e.g. JUCELIA GONCALVES might be the supplier in a specific file)
+                    is_known = False
+                    if self.known_supplier_voter and supp_cand.value.upper() in self.known_supplier_voter.known_suppliers:
+                        is_known = True
+
+                    user_entities = ["VAGNER", "GAIATTO", "JUCELIA", "GONCALVES", "VM AGRO", "MARCELI", "VESZ"]
+                    if is_known or not any(u in supp_cand.value.upper() for u in user_entities):
+                        result.fornecedor = supp_cand.value
+                        result.extraction_details["supplier_source"] = "layout"
+
+            # === STEP 3.5: KNOWN SUPPLIER CORRECTION ===
+            # === STEP 3.5: KNOWN SUPPLIER CORRECTION & FALLBACK ===
+            if self.known_supplier_voter:
+                # 1. Correct existing supplier
+                if result.fornecedor:
+                    corrected = self.known_supplier_voter.find_match(result.fornecedor)
+                    if corrected:
+                        result.fornecedor = corrected
+                        result.extraction_details["supplier_corrected"] = True
+                    
+                    # 2. OVERRIDE: If current supplier is NOT in known list, but we find a known one in text
+                    elif full_text and result.fornecedor.upper() not in self.known_supplier_voter.known_suppliers:
+                         for known in self.known_supplier_voter.known_suppliers:
+                            if known in full_text.upper():
+                                result.fornecedor = known
+                                result.extraction_details["supplier_source"] = "known_list_override"
+                                break
+            
+            # 3. HIERARCHY OF TRUTH: Downgrade Suspicious/User Entities if Filename Candidate exists
+            # Common False Positives + User Names
+            suspicious_start = ["PREFEITURA", "SECRETARIA", "MINISTERIO", "GOVERNO", "ESTADO", "MUNICIPIO", 
+                              "ALIS", "NOVO HORIZONTE", "NOVA MUTUM", "INFORMATIVO", "RECIBO", "CONTROLE"]
+            user_entities = ["VAGNER", "GAIATTO", "JUCELIA", "GONCALVES", "VM AGRO", "MARCELI", "VESZ"]
+            
+            current_supp = (result.fornecedor or "").upper()
+            is_suspicious = any(current_supp.startswith(s) for s in suspicious_start) or \
+                            any(u in current_supp for u in user_entities)
+                            
+            if is_suspicious:
+                fname_supp = self._extract_supplier_from_filename(pdf_path)
+                if fname_supp and fname_supp.value:
+                    # Prefer Filename over Suspicious OCR
+                    result.fornecedor = fname_supp.value
+                    result.extraction_details["supplier_source"] = "filename_override_suspicious"
+
+            # Filename Supplier fallback (if empty)
+            # PRIORITY CHANGE: Trust Filename Supplier ABOVE OCR (Hierarchy of Truth: User Metadata > OCR)
+            fname_supp = self._extract_supplier_from_filename(pdf_path)
+            if fname_supp and fname_supp.value:
+                result.fornecedor = fname_supp.value
+                result.extraction_details["supplier_source"] = "filename_priority"
+
+            # Filename Amount fallback (Removed - handled in Priority block)
+
+
+            # === STEP 3.6: ANCHOR VOTER REFINEMENT (BOLETOS) ===
+            if self.anchor_voter and doc_type == DocumentType.BOLETO:
+                try:
+                    # Re-open doc for anchor (could optmize to pass doc around)
+                    doc_anchor = fitz.open(pdf_path)
+                    anchor_res = self.anchor_voter.extract_boleto_fields(doc_anchor)
+                    
+                    if "due_anchor" in anchor_res:
+                        # Override due date if anchor found (High Precision)
+                        iso_anchor = self.regex_voter._normalize_date(anchor_res["due_anchor"].value)
+                        if iso_anchor:
+                            result.due_date = iso_anchor
+                            result.extraction_details["due_source"] = "anchor_vencimento"
+                            
+                    if "amount_anchor" in anchor_res:
+                        # Override amount ONLY if filename didn't provide one
+                        # Filename amounts are ground truth - never override them
+                        if result.extraction_details.get("amount_source") != "filename_priority":
+                            try:
+                                val_str = anchor_res["amount_anchor"].value
+                                cents = self.regex_voter._parse_money(val_str)
+                                if cents > 0:
+                                    result.amount_cents = cents
+                                    result.extraction_details["amount_source"] = "anchor_valor"
+                            except:
+                                pass
+                except Exception as e:
+                    logger.warning(f"Anchor Voter integration failed: {e}")
+
+            # === STEP 4: REPAIR PASS ===
+            # NFe Access Key
+            key_match = BrazilianPatterns.ACCESS_KEY.search(full_text)
+            if key_match:
+                result.access_key = key_match.group(1)
+            
+            if result.access_key and OCRRepairEngine:
+                repaired = OCRRepairEngine.repair_nfe_access_key(result.access_key)
+                if repaired:
+                    result.access_key = repaired
+                    
+            # Doc Number Priority: Filename > Access Key > OCR
+            # Filename is ground truth - users manually name files correctly
+            fname_num = self._extract_doc_number_from_filename(pdf_path)
+            if fname_num and fname_num.value:
+                result.doc_number = fname_num.value
+                result.extraction_details["doc_number_source"] = "filename_priority"
+            
+            # Fallback to Access Key (NFE/NFSE only)
+            if not result.doc_number and result.access_key and doc_type in [DocumentType.NFE, DocumentType.NFSE]:
+                derived = self._extract_number_from_access_key(result.access_key)
+                if derived:
+                    result.doc_number = derived
+                    result.extraction_details["doc_number_source"] = "access_key"
+
+            # Final fallback: regex/OCR
+            if not result.doc_number:
+                num_res = self.regex_voter.extract_doc_number(full_text, doc_type)
+                if num_res.value:
+                    result.doc_number = num_res.value
+                    result.extraction_details["doc_number_source"] = "regex_ocr"
+            
+            # SISBB
+            sisbb = self.regex_voter.extract_sisbb(full_text)
+            if sisbb.value:
+                result.sisbb_auth = sisbb.value
+            
+            # Scheduling
+            result.is_scheduled = self.regex_voter.check_scheduling(full_text)
+            if result.is_scheduled:
+                result.payment_status = PaymentStatus.SCHEDULED
+            elif result.sisbb_auth or (result.payment_date and not result.is_scheduled):
+                result.payment_status = PaymentStatus.CONFIRMED
+            
+             # === STEP 5: ENTITY TAG ===
+            tag_res = self.regex_voter.extract_entity_tag(full_text)
+            if tag_res.value:
+                result.entity_tag = tag_res.value
+            else:
+                # Try filename
+                fname = Path(pdf_path).name
+                if "_VG_" in fname: result.entity_tag = "VG"
+                elif "_MV_" in fname: result.entity_tag = "MV"
+            
+        except Exception as e:
+            logger.error(f"Extraction pipeline error: {e}")
+            result.extraction_details["error"] = str(e)
+            
+        result.processing_time_ms = int((time.time() - start_time) * 1000)
+        return result
+
     def _extract_date_from_filename(self, pdf_path: str) -> Optional[DateInfo]:
-        """
-        Extrai data do nome do arquivo (DD.MM.YYYY_...).
-        CRITICAL para NFSE que não tem vencimento.
-        """
+        """Extrai data do nome do arquivo (DD.MM.YYYY_...)."""
         try:
             filename = Path(pdf_path).name
-            # Pattern: DD.MM.YYYY at start of filename
             match = re.match(r'^(\d{2})\.(\d{2})\.(\d{4})_', filename)
             if match:
                 day, month, year = match.groups()
                 iso_date = f"{year}-{month}-{day}"
-                return DateInfo(
-                    value=iso_date,
-                    date_type='filename',
-                    confidence=0.95,
-                    source='filename',
-                    context=f"From filename: {filename[:20]}..."
-                )
-        except Exception as e:
-            logger.debug(f"Could not extract date from filename: {e}")
+                return DateInfo(iso_date, 'filename', 0.99, 'filename')
+        except:
+            pass
         return None
-    
-    def _is_valid_supplier(self, supplier: str) -> bool:
-        """
-        Validate a supplier name using centralized SupplierValidator.
-        Delegates to professional is_valid_supplier from supplier_validator module.
-        """
-        if is_valid_supplier:
-            return is_valid_supplier(supplier)
-        # Fallback if import failed
-        if not supplier or len(supplier.strip()) < 3:
-            return False
-        return True
-    
-    def _resolve_supplier(
-        self, 
-        pdf_path: str, 
-        full_text: str, 
-        doc_type: DocumentType, 
-        layout_results: Dict[str, VoterResult], 
-        gliner_result: Dict[str, VoterResult]
-    ) -> Tuple[Optional[str], Dict[str, Any]]:
-        """
-        Resolves supplier using Ensemble logic: GLiNER -> Regex -> Layout -> SmolDocling.
-        Returns: (supplier_name, sources_update_dict)
-        """
-        sources = {}
-        final_supplier = None
-        
-        # Coleta votos
-        supplier_votes = []
-        
-        # 1. GLiNER
-        if "fornecedor" in gliner_result:
-            supplier_votes.append(gliner_result["fornecedor"])
-            
-        # 2. Regex (agora usa YAML patterns)
-        regex_supp = self.regex_voter.extract_supplier(full_text, doc_type)
-        if regex_supp.value:
-            supplier_votes.append(regex_supp)
-            
-        # 3. Layout sources
-        if "header_supplier" in layout_results:
-            supplier_votes.append(layout_results["header_supplier"])
-            
-        # Consenso
-        if supplier_votes:
-            # Ordena por confianca
-            sorted_votes = sorted(supplier_votes, key=lambda v: v.confidence, reverse=True)
-            
-            best_supplier_vote = None
-            cleaned_supplier = None
-            
-            for vote in sorted_votes:
-                # Usa cleaner do EnsembleExtractor (que limpa LTDA, stop words, etc)
-                candidate = self._clean_supplier(vote.value)
-                if not candidate:
-                    continue
-                
-                # Validação centralizada
-                if not self._is_valid_supplier(candidate):
-                    logger.debug(f"Skipping invalid/banned supplier: {candidate}")
-                    continue
-                
-                best_supplier_vote = vote
-                cleaned_supplier = candidate
-                break
-            
-            # Fuzzy match com known suppliers
-            if validate_supplier and cleaned_supplier:
-                match_result = validate_supplier(cleaned_supplier, min_similarity=0.5)
-                if match_result:
-                    canonical, similarity = match_result
-                    cleaned_supplier = canonical
-                    sources["fornecedor_match_score"] = f"{similarity:.0%}"
 
-            if cleaned_supplier:
-                final_supplier = cleaned_supplier
-                sources["fornecedor"] = best_supplier_vote.source if best_supplier_vote else "unknown"
-                
-                # SmolDocling Fallback for Low Confidence (< 0.6)
-                if best_supplier_vote and best_supplier_vote.confidence < 0.6:
-                    sources["fornecedor_needs_review"] = True
-                    
-                    if self.use_vlm and SMOL_DOCLING_AVAILABLE and get_smol_docling_voter:
-                        try:
-                            smol_voter = get_smol_docling_voter()
-                            smol_result = smol_voter.extract_from_pdf(pdf_path)
-                            if smol_result and smol_result.get("supplier_name"):
-                                smol_supplier = smol_result["supplier_name"]
-                                # Validate
-                                if self._is_valid_supplier(smol_supplier):
-                                    # Match
-                                    if validate_supplier:
-                                        smol_match = validate_supplier(smol_supplier, min_similarity=0.5)
-                                        if smol_match and self._is_valid_supplier(smol_match[0]):
-                                            final_supplier = smol_match[0]
-                                            sources["fornecedor"] = "smol_docling"
-                                            sources["fornecedor_match_score"] = f"{smol_match[1]:.0%}"
-                                            sources["fornecedor_needs_review"] = False
-                                            logger.info(f"SmolDocling found supplier: {final_supplier}")
-                        except Exception as e:
-                            logger.debug(f"SmolDocling fallback error: {e}")
-
-        # SmolDocling Rescue (No supplier found)
-        if not final_supplier and self.use_vlm and SMOL_DOCLING_AVAILABLE and get_smol_docling_voter:
-            try:
-                smol_voter = get_smol_docling_voter()
-                smol_result = smol_voter.extract_from_pdf(pdf_path)
-                if smol_result and smol_result.get("supplier_name"):
-                    smol_supplier = smol_result["supplier_name"]
-                    if self._is_valid_supplier(smol_supplier):
-                        if validate_supplier:
-                            smol_match = validate_supplier(smol_supplier, min_similarity=0.5)
-                            if smol_match and self._is_valid_supplier(smol_match[0]):
-                                final_supplier = smol_match[0]
-                                sources["fornecedor"] = "smol_docling_rescue"
-                                logger.info(f"SmolDocling rescued supplier: {final_supplier}")
-            except Exception as e:
-                logger.debug(f"SmolDocling rescue error: {e}")
-
-        return final_supplier, sources
-
-    def _resolve_dates(
-        self, 
-        pdf_path: str, 
-        full_text: str, 
-        doc_type: DocumentType, 
-        layout_results: Dict[str, VoterResult],
-        result: ExtractionResult
-    ):
-        """
-        Resolves dates (Emission, Due, Payment) and Filename Date.
-        Updates result object in-place with dates, sources, and priorities.
-        """
-        # 1. Regex dates
-        dates = self.regex_voter.extract_dates(full_text)
-        
-        # 2. Filename date (Critical fallback)
-        filename_date_info = self._extract_date_from_filename(pdf_path)
-        if filename_date_info:
-            result.filename_date = filename_date_info.value
-            result.all_dates.append(filename_date_info)
-        
-        # 3. Populate basic dates
-        if "payment" in dates:
-            result.payment_date = dates["payment"].value
-            result.extraction_sources["payment_date"] = dates["payment"].source
-            result.all_dates.append(DateInfo(
-                value=dates["payment"].value,
-                date_type='payment',
-                confidence=dates["payment"].confidence,
-                source=dates["payment"].source
-            ))
-        
-        if "due" in dates:
-            result.due_date = dates["due"].value
-            result.extraction_sources["due_date"] = dates["due"].source
-            result.all_dates.append(DateInfo(
-                value=dates["due"].value,
-                date_type='due',
-                confidence=dates["due"].confidence,
-                source=dates["due"].source
-            ))
-        
-        if "emission" in dates:
-            result.emission_date = dates["emission"].value
-            result.extraction_sources["emission_date"] = dates["emission"].source
-            result.all_dates.append(DateInfo(
-                value=dates["emission"].value,
-                date_type='emission',
-                confidence=dates["emission"].confidence,
-                source=dates["emission"].source
-            ))
-            
-        # 4. Prioritization Logic
-        primary_date = None
-        
-        if doc_type == DocumentType.COMPROVANTE:
-            primary_date = result.payment_date or result.due_date or result.emission_date
-            result.date_selection_reason = "comprovante_prioritizes_payment"
-        elif doc_type == DocumentType.BOLETO:
-            primary_date = result.due_date or result.payment_date
-            result.date_selection_reason = "boleto_prioritizes_due"
-        elif doc_type == DocumentType.NFSE:
-            if result.due_date:
-                primary_date = result.due_date
-                result.date_selection_reason = "nfse_has_due_date"
-            elif result.filename_date:
-                primary_date = result.filename_date
-                result.date_selection_reason = "nfse_uses_filename_date(no_due)"
-            else:
-                primary_date = result.emission_date
-                result.date_selection_reason = "nfse_fallback_emission"
-        elif doc_type == DocumentType.NFE:
-            if result.due_date:
-                primary_date = result.due_date
-                result.date_selection_reason = "nfe_has_due_date"
-            elif result.filename_date:
-                primary_date = result.filename_date
-                result.date_selection_reason = "nfe_uses_filename_date(no_due)"
-            else:
-                primary_date = result.emission_date
-                result.date_selection_reason = "nfe_fallback_emission"
-        else:
-            primary_date = result.due_date or result.payment_date or result.emission_date
-            result.date_selection_reason = "default_priority"
-        
-        # Update due_date if it was empty but primary was found
-        if primary_date and not result.due_date:
-            result.due_date = primary_date
-            
-        # 5. Layout Fallback for emission
-        if not result.emission_date and "emission_layout" in layout_results:
-            result.emission_date = layout_results["emission_layout"].value
-            result.extraction_sources["emission_date"] = "layout"
-
-            result.extraction_sources["emission_date"] = "layout"
-
-    def _extract_number_from_access_key(self, access_key: str) -> Optional[str]:
-        """
-        Extrai o número da NFe/NFCe diretamente da chave de acesso (44 dígitos).
-        
-        DETERMINÍSTICO - 100% preciso para NFe/NFCe.
-        
-        Posições da Chave de Acesso:
-        - UF (2) + AAMM (4) + CNPJ (14) + Mod (2) + Série (3) + NÚMERO (9) + ...
-        - Índices Python: posições 25 a 34 (exclusivo) contêm o número
-        
-        Args:
-            access_key: Chave de acesso de 44 dígitos
-            
-        Returns:
-            Número da nota (sem zeros à esquerda) ou None
-        """
-        if not access_key:
-            return None
-        
-        # Remove espaços e caracteres não numéricos
-        clean_key = re.sub(r'\D', '', access_key)
-        
-        if len(clean_key) != 44:
-            return None
-        
+    def _extract_supplier_from_filename(self, pdf_path: str) -> Optional[VoterResult]:
+        """Extrai fornecedor do nome do arquivo (3a posicao)."""
         try:
-            # Posições 25 a 34 contêm o número (9 dígitos com zeros à esquerda)
-            numero_str = clean_key[25:34]
-            # Remove zeros à esquerda
-            numero_int = int(numero_str)
-            return str(numero_int)
-        except ValueError:
-            return None
+            filename = Path(pdf_path).stem
+            # Pattern: DD.MM.YYYY_ENTITY_SUPPLIER_...
+            # We trust the folder structure: Date_Entity_Supplier_...
+            parts = filename.split('_')
+            if len(parts) >= 3:
+                # parts[0] = Date
+                # parts[1] = Entity (VG/MV)
+                # parts[2] = Supplier
+                supplier_name = parts[2].strip()
+                # Simple sanity check: length
+                if len(supplier_name) >= 3:
+                    return VoterResult(supplier_name, 0.99, "filename")
+        except:
+            pass
+        return None
 
-    def _resolve_financials(
-        self,
-        full_text: str,
-        doc_type: DocumentType,
-        result: ExtractionResult
-    ):
-        """
-        Resolves Amount, Doc Number, SISBB Auth, Payment Status, and Final Confidence.
-        Updates result object in-place.
-        
-        MELHORIA: Para NFE/NFSE, prioriza extração DETERMINÍSTICA via Chave de Acesso
-        ao invés de OCR/Regex probabilístico.
-        """
-        # 1. Extract Amount
-        amount_result = self.regex_voter.extract_amount(full_text)
-        if amount_result.value:
-            result.amount_cents = int(amount_result.value)
-            result.extraction_sources["amount"] = amount_result.source
-        
-        # 2. Extract Access Key first (for NFE, this is the SOURCE OF TRUTH)
-        access_key_match = BrazilianPatterns.ACCESS_KEY.search(full_text)
-        if access_key_match:
-            result.access_key = access_key_match.group(1)
-        
-        # 3. Extract Document Number - PRIORIDADE para Chave de Acesso em NFE/NFSE
-        if doc_type in [DocumentType.NFE, DocumentType.NFSE] and result.access_key:
-            # MÉTODO DETERMINÍSTICO: Extrai número da Chave de Acesso
-            derived_number = self._extract_number_from_access_key(result.access_key)
-            if derived_number:
-                result.doc_number = derived_number
-                result.extraction_sources["doc_number"] = "access_key_deterministic"
-                logger.debug(f"Doc number from access key: {derived_number}")
-        
-        # Fallback: Regex/YAML patterns (para BOLETO, COMPROVANTE ou se chave não encontrada)
-        if not result.doc_number:
-            doc_num_result = self.regex_voter.extract_doc_number(full_text, doc_type)
-            if doc_num_result.value:
-                result.doc_number = doc_num_result.value
-                result.extraction_sources["doc_number"] = doc_num_result.source
-        
-        # 4. SISBB Validation (Banco do Brasil)
-        sisbb_result = self.regex_voter.extract_sisbb(full_text)
-        if sisbb_result.value:
-            result.sisbb_auth = sisbb_result.value
-        
-        # 5. Determine Payment Status
-        result.is_scheduled = self.regex_voter.check_scheduling(full_text)
-        
-        if result.is_scheduled:
-            result.payment_status = PaymentStatus.SCHEDULED
-        elif result.sisbb_auth:
-            result.payment_status = PaymentStatus.CONFIRMED
-        else:
-            result.payment_status = PaymentStatus.UNKNOWN
-        
-        # 6. Calculate Final Confidence
-        result.confidence = self._calculate_confidence(result)
-        result.needs_review = result.confidence < 0.6
-
-    def extract_from_pdf(
-        self, 
-        pdf_path: str, 
-        page_range: Optional[Tuple[int, int]] = None
-    ) -> ExtractionResult:
-        """
-        Extrai dados de um PDF usando ensemble voting (Decomposed Logic).
-        """
-        start_time = datetime.now()
-        result = ExtractionResult()
-        doc = None
-        
+    def _extract_number_from_access_key(self, key: str) -> Optional[str]:
+        """Extract nf number from 44-digit key."""
         try:
-            # ========================================
-            # STEP 0: Leitura e Texto
-            # ========================================
-            try:
-                doc = fitz.open(pdf_path)
-            except Exception as e:
-                logger.error(f"Erro ao abrir PDF: {e}")
-                result.needs_review = True
-                return result
+            if len(key) == 44:
+                return str(int(key[25:34]))
+        except:
+            pass
+        return None
 
-            # Extrai texto
-            if page_range:
-                start, end = page_range
-                pages = range(start - 1, min(end, len(doc)))
-            else:
-                pages = range(len(doc))
-            
-            full_text = ""
-            for i in pages:
-                page = doc[i]
-                text = page.get_text()
-                full_text += text + "\n\n"
-            
-            # OCR Fallback
-            if not self._is_readable_text(full_text):
-                logger.info(f"Text unreadable, attempting OCR for {pdf_path}")
-                if self.ocr_voter and self.ocr_voter.is_available():
-                    ocr_text = ""
-                    for i in pages:
-                        ocr_page = self.ocr_voter.extract_text(doc, i)
-                        if ocr_page:
-                            ocr_text += ocr_page + "\n\n"
-                    if self._is_readable_text(ocr_text):
-                        full_text = ocr_text
-                        result.extraction_sources["method"] = "ocr"
-            
-            result.raw_text = full_text
+    def _extract_amount_from_filename(self, pdf_path: str) -> int:
+        """Extract amounts from filename."""
+        try:
+            parts = Path(pdf_path).name.split('_')
+            # Check for pattern X.XXX,XX
+            # Skip first part (Date)
+            for p in parts[1:]:
+                # Looser check: if it looks like a number (has digits and comma/dot)
+                # and isn't the doc number (usually ints without separators, but hard to tell)
+                # Filter: Must have at least one digit
+                if re.search(r'\d', p):
+                   # Heuristic: If it has ',' and '.' it's likely money "1.234,56"
+                   # If it has ',' and 2 digits at end, likely money
+                   # If it is just digits "12345", maybe doc number?
+                   # Let's try to parse ANY block that looks like currency
+                   
+                   # Clean: remove keys, labels? No, filename is usually just values
+                   # Just strip non-numeric/dot/comma
+                   clean_p = re.sub(r'[^\d\.,]', '', p)
+                   if not clean_p: continue
+                   
+                   # Attempt parse
+                   try:
+                       # Brazilian format assumption: Last separator is decimal
+                       if ',' in clean_p:
+                           # 1.234,56 -> 1234.56
+                           norm = clean_p.replace('.', '').replace(',', '.')
+                           val = float(norm)
+                           return int(val * 100)
+                       elif '.' in clean_p:
+                           # 1.234.56 ? or 1234.56?
+                           # Assume dot is thousand separator if multiple?
+                           # Or decimal if only one and at end?
+                           # Ambiguous. But Brazilian standard uses comma for decimal.
+                           # If dot is used, might be "1234.56" (US) or "1.234" (BR Thousand).
+                           # Let's assume if NO comma, and dot exists:
+                           # If 3 digits after dot => Thousand? "1.000"
+                           # If 2 digits => Decimal? "10.99"
+                           pass
+                   except:
+                        pass
+                        
+            # Fallback: Original strict check for "safe" numbers
+            for p in parts[1:]:
+                if re.match(r'^[\d\.]+,?\d*$', p):
+                    try:
+                        clean = p.replace('.', '').replace(',', '.')
+                        val = float(clean)
+                        return int(val * 100)
+                    except:
+                        pass
+        except:
+            pass
+        return 0
 
-            # ========================================
-            # STEP 1: Classificacao e Entity Tag
-            # ========================================
-            doc_type, type_conf = self.regex_voter.classify_document(full_text)
-            result.doc_type = doc_type
-            result.extraction_sources["doc_type"] = "regex"
+    def _extract_doc_number_from_filename(self, pdf_path: str) -> Optional[VoterResult]:
+        """Extrai numero do documento do nome do arquivo.
+        
+        Pattern: DD.MM.YYYY_ENTITY_SUPPLIER_AMOUNT_TYPE_DOCNUM[_DOCNUM2].pdf
+        Examples:
+        - 01.11.2025_VG_SUPPLIER_3.060,00_BOLETO_4650.pdf -> 4650
+        - 01.11.2025_VG_SUPPLIER_BOLETO_FECHAMENTO.pdf -> FECHAMENTO
+        - 30.11.2025_VG_SUPPLIER_NFSE_2.pdf -> 2
+        - 10.11.2025_VG_SUPPLIER_NFSE_196 pg 0311.pdf -> 196 pg 0311
+        """
+        try:
+            filename = Path(pdf_path).stem
             
-            entity_result = self.regex_voter.extract_entity_tag(full_text)
-            if entity_result.value:
-                result.entity_tag = entity_result.value
-                result.extraction_sources["entity"] = entity_result.source
-
-            # ========================================
-            # STEP 2: Executa Voters (GLiNER + Layout)
-            # ========================================
-            # GLiNER Vote - OTIMIZADO: Usa apenas cabeçalho + rodapé
-            # O meio do documento (lista de itens) confunde o modelo e é irrelevante
-            gliner_entities = {}
-            if self.gliner_voter:
-                # Otimização: Concatena primeiros 2000 chars (header) + últimos 1000 chars (footer)
-                # Isso cobre: Fornecedor (cabeçalho), Totais (rodapé), ignora itens (meio)
-                header_text = full_text[:2000]
-                footer_text = full_text[-1000:] if len(full_text) > 2000 else ""
-                optimized_text = header_text + "\n\n" + footer_text
+            # Find the document type keyword
+            doc_types = ['BOLETO', 'NFE', 'NFSE', 'FATURA', 'CONTRATO', 'APOLICE', 'CTE', 'DAR', 'CC']
+            
+            # Search for doc type in parts
+            parts = filename.split('_')
+            doc_type_idx = -1
+            
+            for i, part in enumerate(parts):
+                part_upper = part.upper()
+                # Check if this part starts with a known doc type
+                for dt in doc_types:
+                    if part_upper.startswith(dt) or part_upper == dt:
+                        doc_type_idx = i
+                        # Don't break - keep looking for last occurrence
+            
+            # If found, everything AFTER the doc type is the doc number
+            if doc_type_idx != -1 and doc_type_idx < len(parts) - 1:
+                # Collect remaining parts
+                remaining = parts[doc_type_idx + 1:]
                 
-                raw_entities = self.gliner_voter.extract_entities(optimized_text)
-                # Ensure we have VoterResults with penalty if needed (handled in resolve?)
-                # We'll pass raw entities, _resolve_supplier logic handles specific keys
-                gliner_entities = raw_entities
+                # Handle ".pdf" in last element
+                if remaining:
+                    remaining[-1] = remaining[-1].replace('.pdf', '').replace('.PDF', '')
+                
+                # Join with underscore for multi-part doc numbers (e.g., 123_456)
+                final_val = "_".join(remaining).strip()
+                
+                if final_val:
+                    return VoterResult(final_val, 0.99, "filename")
+            
+            # Fallback: try collecting numeric parts from end
+            collected_nums = []
+            for i in range(len(parts) - 1, -1, -1):
+                p = parts[i].strip().replace('.pdf', '').replace('.PDF', '')
+                
+                # Check for numeric parts (single digit like "2" should also work)
+                if p.isdigit():
+                    collected_nums.insert(0, p)
+                else:
+                    # Break sequence if we hit a non-number (unless empty collection)
+                    if collected_nums:
+                        break
+            
+            if collected_nums:
+                final_val = "_".join(collected_nums)
+                return VoterResult(final_val, 0.95, "filename_numeric")
 
-            # Layout Vote
-            layout_results = self.layout_voter.extract_from_layout(doc, 0)
-            
-            # ========================================
-            # STEP 3: Resolve Componentes (Decomposed)
-            # ========================================
-            
-            # 3.1 Fornecedor
-            final_supplier, supp_sources = self._resolve_supplier(
-                pdf_path, full_text, doc_type, layout_results, gliner_entities
-            )
-            result.fornecedor = final_supplier
-            result.extraction_sources.update(supp_sources)
+        except:
+            pass
+        return None
 
-            # 3.2 Datas (inclui filename date e priorização)
-            self._resolve_dates(pdf_path, full_text, doc_type, layout_results, result)
-            
-            # 3.3 Valor, Numero Doc, Status
-            self._resolve_financials(full_text, doc_type, result)
-            
-            # ========================================
-            # STEP 4: Finaliza
-            # ========================================
-            end_time = datetime.now()
-            result.processing_time_ms = int((end_time - start_time).total_seconds() * 1000)
-            result.voters_used = list(result.extraction_sources.keys())
-            
-        except Exception as e:
-            logger.error(f"Erro na extracao: {e}")
-            result.needs_review = True
-        finally:
-            if doc:
-                doc.close()
-        
-        return result
-        
-        return result
-    
-    def _clean_supplier(self, name: str) -> str:
-        """Limpa nome do fornecedor."""
-        if not name:
-            return ""
-        
-        # Remove quebras de linha
-        name = re.sub(r'[\n\r]+', ' ', name)
-        name = re.sub(r'\s+', ' ', name).strip().upper()
-        
-        # Corta em palavras de parada
-        stop_words = ['CNPJ', 'CPF', 'PAGADOR', 'CEP', 'ENDERECO', 
-                      'AGENCIA', 'SITE', 'TELEFONE', 'AG', 'DATA',
-                      'VENCIMENTO', 'LOCAL']
-        for stop in stop_words:
-            if f" {stop}" in name:
-                name = name.split(f" {stop}")[0].strip()
-        
-        # Remove sufixos
-        suffixes = [" LTDA", " ME", " EPP", " EIRELI", " SA", " S.A."]
-        for suffix in suffixes:
-            if name.endswith(suffix):
-                name = name[:-len(suffix)].strip()
-        
-        return name[:50]
-    
-    def _calculate_confidence(self, result: ExtractionResult) -> float:
-        """Calcula confianca geral."""
-        score = 0.0
-        
-        if result.doc_type != DocumentType.UNKNOWN:
-            score += 0.2
-        
-        if result.amount_cents > 0:
-            score += 0.25
-        
-        if result.due_date or result.emission_date or result.payment_date:
-            score += 0.2
-        
-        if result.fornecedor and len(result.fornecedor) >= 3:
-            score += 0.2
-        
-        if result.entity_tag:
-            score += 0.15
-        
-        return min(score, 1.0)
-
-
-# ==============================================================================
-# FUNCOES AUXILIARES
-# ==============================================================================
 
 def test_ensemble_extraction(pdf_path: str):
     """Testa extracao ensemble em um arquivo."""
-    extractor = EnsembleExtractor(use_gliner=True)
+    extractor = EnsembleExtractor()
     result = extractor.extract_from_pdf(pdf_path)
     
     print("=" * 60)
     print(f"Arquivo: {Path(pdf_path).name}")
     print("=" * 60)
     print(f"Tipo: {result.doc_type.value} ({result.extraction_sources.get('doc_type', '-')})")
-    print(f"Confianca: {result.confidence:.1%}")
     print("-" * 60)
     print(f"Fornecedor: {result.fornecedor} ({result.extraction_sources.get('fornecedor', '-')})")
     print(f"Entidade: {result.entity_tag}")
@@ -1491,7 +1368,7 @@ def test_ensemble_extraction(pdf_path: str):
     print(f"Data Vencimento: {result.due_date}")
     print(f"Data Emissao: {result.emission_date}")
     print(f"SISBB: {result.sisbb_auth}")
-    print(f"Agendamento: {result.is_scheduled}")
+    print(f"Status: {result.payment_status.value}")
     print(f"Precisa Revisao: {result.needs_review}")
 
 

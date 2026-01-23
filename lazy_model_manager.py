@@ -36,9 +36,10 @@ class LazyModelManager:
         self.memory_limit_bytes = memory_limit_gb * 1024 * 1024 * 1024
         self._active_models: Dict[str, Any] = {}
         self._model_sizes = {
-            "gliner": 1.2,  # ~1.2GB RAM
-            "vlm": 2.5,     # ~2.5GB RAM (SmolDocling)
-            "qwen": 4.0,    # ~4GB RAM (Qwen2-VL) - DO NOT USE with 8GB
+            "gliner": 1.2,    # ~1.2GB RAM
+            "florence2": 0.5, # ~0.5GB RAM (0.23B params)
+            "surya": 1.5,     # ~1.5GB RAM (Rec + Det)
+            "mcmf": 0.5       # ~0.5GB RAM (Solver)
         }
     
     def get_memory_usage_gb(self) -> float:
@@ -53,15 +54,18 @@ class LazyModelManager:
             return 8.0  # Assume 8GB if can't check
         return psutil.virtual_memory().available / (1024 ** 3)
     
+    def get_memory_stats(self) -> Dict:
+        """Get detailed memory stats."""
+        # Note: This method mimics get_status but with different keys for compatibility
+        return {
+            "vram_used_gb": 0.0, # Placeholder if no GPU monitoring
+            "ram_used_gb": self.get_memory_usage_gb()
+        }
+
     def check_memory(self, required_gb: float = 1.0) -> bool:
         """
         Check if there's enough RAM for a new model.
-        
-        Args:
-            required_gb: Estimated RAM needed for the model
-            
-        Returns:
-            True if safe to load, False if would exceed limit
+        Returns True if safe to load, False if would exceed limit.
         """
         if not PSUTIL_AVAILABLE:
             return True  # Proceed without check
@@ -70,15 +74,16 @@ class LazyModelManager:
         current_used = mem.used
         would_use = current_used + (required_gb * 1024 ** 3)
         
-        if would_use > self.memory_limit_bytes:
-            logger.critical(
-                f"MEMORY LIMIT: Would use {would_use/1e9:.2f}GB, "
-                f"limit is {self.memory_limit_bytes/1e9:.2f}GB"
+        # Buffer de 500MB
+        limit = self.memory_limit_bytes - (0.5 * 1024 * 1024 * 1024)
+        
+        if would_use > limit:
+            logger.warning(
+                f"MEMORY WARNING: Would use {would_use/1e9:.2f}GB, "
+                f"safe limit is {limit/1e9:.2f}GB"
             )
             return False
-        
-        logger.debug(f"Memory check OK: {current_used/1e9:.2f}GB used, "
-                     f"need {required_gb}GB, limit {self.memory_limit_bytes/1e9:.2f}GB")
+            
         return True
     
     def unload_all(self):
@@ -92,6 +97,9 @@ class LazyModelManager:
         for name in model_names:
             try:
                 model = self._active_models.pop(name)
+                # Call unload method if available
+                if hasattr(model, 'unload_model'):
+                    model.unload_model()
                 del model
             except Exception as e:
                 logger.warning(f"Error unloading {name}: {e}")
@@ -113,77 +121,83 @@ class LazyModelManager:
         logger.info("Memory cleanup complete")
     
     def load_gliner(self) -> Optional[Any]:
-        """
-        Load GLiNER model with memory safety.
-        
-        Returns:
-            GLiNER model or None if memory insufficient
-        """
+        """Load GLiNER model."""
         if "gliner" in self._active_models:
             return self._active_models["gliner"]
         
-        # Unload other heavy models first
         self.unload_all()
         
         if not self.check_memory(self._model_sizes["gliner"]):
-            raise MemoryError("Insufficient RAM for GLiNER")
+            logger.warning("Low memory for GLiNER")
         
         try:
-            logger.info("Loading GLiNER (small)...")
+            logger.info("Loading GLiNER...")
             from gliner import GLiNER
             model = GLiNER.from_pretrained("urchade/gliner_small-v2.1")
             self._active_models["gliner"] = model
-            logger.info("GLiNER loaded successfully")
             return model
-        except ImportError:
-            logger.warning("GLiNER not installed")
-            return None
         except Exception as e:
             logger.error(f"Failed to load GLiNER: {e}")
             return None
-    
-    def load_vlm(self, model_type: str = "smol") -> Optional[Any]:
-        """
-        Load VLM model with memory safety.
-        
-        Args:
-            model_type: "smol" (256M, recommended) or "qwen" (2.2B, dangerous)
             
-        Returns:
-            VLM voter or None if memory insufficient
-        """
-        if model_type == "qwen":
-            logger.warning("Qwen2-VL requires 4GB+ RAM - not recommended for 8GB systems")
-        
-        if "vlm" in self._active_models:
-            return self._active_models["vlm"]
-        
-        # VLM requires exclusive access to memory
+    def load_florence2(self) -> Optional[Any]:
+        """Load Florence-2 Vision Voter."""
+        if "florence2" in self._active_models:
+            return self._active_models["florence2"]
+            
         self.unload_all()
         
-        required = self._model_sizes.get(model_type, 2.5)
-        if not self.check_memory(required):
-            raise MemoryError(f"Insufficient RAM for VLM ({model_type})")
-        
+        if not self.check_memory(self._model_sizes["florence2"]):
+            logger.warning("Low memory for Florence-2")
+            
         try:
-            if model_type == "smol":
-                logger.info("Loading SmolDocling VLM...")
-                from smol_docling_voter import SmolDoclingVoter
-                model = SmolDoclingVoter()
-            else:
-                logger.info("Loading Qwen2-VL (HEAVY)...")
-                from qwen2vl_voter import Qwen2VLVoter
-                model = Qwen2VLVoter()
+            logger.info("Loading Florence-2...")
+            from florence2_voter import get_florence2_voter
+            model = get_florence2_voter()
+            # Explicit load to verify
+            if hasattr(model, '_load_model'):
+                model._load_model()
             
-            self._active_models["vlm"] = model
-            logger.info(f"VLM ({model_type}) loaded successfully")
+            if not model.is_available():
+                logger.warning("Florence-2 unavailable (dependencies missing)")
+                return None
+                
+            self._active_models["florence2"] = model
             return model
-            
-        except ImportError as e:
-            logger.warning(f"VLM not available: {e}")
-            return None
         except Exception as e:
-            logger.error(f"Failed to load VLM: {e}")
+            logger.warning(f"Florence-2 disabled: {e}")
+            return None
+
+    def load_surya(self) -> Optional[Any]:
+        """Load Surya OCR Voter."""
+        if "surya" in self._active_models:
+            return self._active_models["surya"]
+            
+        self.unload_all()
+        
+        # Surya is heavy
+        if not self.check_memory(self._model_sizes["surya"]):
+            logger.warning("Low memory for Surya - attempting anyway")
+            
+        try:
+            logger.info("Loading Surya OCR...")
+            from surya_voter import get_surya_voter
+            model = get_surya_voter()
+            
+            # Check availability before heavy load attempt if possible
+            # But surya_voter imports inside _load_models, so we call it
+            if hasattr(model, '_load_models'):
+                model._load_models()
+            
+            if not model.is_available():
+                logger.warning("Surya OCR unavailable (dependencies missing)")
+                return None
+                
+            self._active_models["surya"] = model
+            return model
+        except Exception as e:
+            # Downgrade to warning to not scare user
+            logger.warning(f"Surya OCR disabled: {e}")
             return None
     
     @contextmanager
@@ -200,8 +214,12 @@ class LazyModelManager:
         try:
             if model_name == "gliner":
                 model = self.load_gliner()
+            elif model_name == "florence2":
+                model = self.load_florence2()
+            elif model_name == "surya":
+                model = self.load_surya()
             elif model_name == "vlm":
-                model = self.load_vlm()
+                pass # Deprecated generic VLM
             else:
                 raise ValueError(f"Unknown model: {model_name}")
             

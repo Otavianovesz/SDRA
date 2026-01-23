@@ -536,8 +536,19 @@ class CognitiveScanner:
         Returns:
             PageInfo com dados extraidos
         """
-        # Extrai texto
+        # Extrai texto (metodo rapido)
         text = page.get_text()
+        
+        # Fallback para OCR se texto insuficiente (para PDFs escaneados)
+        if len(text.strip()) < 10 and self.ensemble and self.ensemble.ocr_voter:
+            try:
+                # Usa OCR Voter do ensemble que ja tem preprocessamento v3.0
+                ocr_text = self.ensemble.ocr_voter.extract_text(page.parent, page_num - 1)
+                if ocr_text:
+                    text = ocr_text
+                    print(f"  [OCR] Pagina {page_num} processada via OCR")
+            except Exception as e:
+                print(f"  [AVISO] Falha no OCR fallback: {e}")
         
         # Classifica a pagina
         doc_type, confidence = self.classify_page(text)

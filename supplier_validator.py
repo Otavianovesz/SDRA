@@ -31,7 +31,7 @@ DEFAULT_BANNED_ENTITIES = {
     # Pagadores (NOT beneficiários - these are PAYERS, not suppliers)
     'AUTO ELETRICA MENIN', 'MENIN COMERCIO DE PECAS', 'MENIN',
     'MULTISEG INFORMATICA', 'MULTISEG',
-    'VAGNER LUIZ GAIATTO E OUTRA', 'VAGNER LUIZ GAIATTO',
+    'VAGNER LUIZ GAIATTO E OUTRA', 'VAGNER LUIZ GAIATTO', 'VAGNER GAIATTO',
     
     # Insurance/Legal model text (NOT supplier names)
     'MAPFRE SEGUROS', 'MAPFRE', 'SEFAZ', 'SEFAZ AUTORIZADORA',
@@ -57,6 +57,8 @@ DEFAULT_BANNED_ENTITIES = {
     # Órgãos públicos (geralmente não são prestadores diretos)
     'PREFEITURA', 'SECRETARIA', 'GOVERNO', 'ESTADO', 'MUNICIPIO',
     'RECEITA FEDERAL', 'MINISTERIO', 'TRIBUNAL',
+    'PREFEITURA MUNICIPAL', 'O MUNICIPAL', 'MUNICIPAL DE NOVA',
+    'NOVA MUTUM', 'SECRETARIA DE FINANCAS', 'LUCAS DO RIO VERDE',
     
     # Endereços/Locais (OCR noise - NOT supplier names)
     'RODOVIA', 'AVENIDA', 'RUA', 'ZONA RURAL', 'FAZENDA',
@@ -67,7 +69,7 @@ DEFAULT_BANNED_ENTITIES = {
     'INSCRI', 'INSCRICAO', 'INSCRIÇÃO',
     'IBPT', 'DANF3E', 'FUNTTEL', 'CPF', 'CNPJ', 'ISENTO',
     
-    # Specific OCR errors from tests
+    # Specific OCR errors from tests  
     'AGROFIBRAMUTUM', 'AGROFIBRAMUTUM LTDA',
     'NOVA MUTUM BORRACHA',
     'G. Z. BARGERI KANIESKI', 'BARGERI KANIESKI', 'BARGERI',
@@ -75,6 +77,11 @@ DEFAULT_BANNED_ENTITIES = {
     'SPEED SYSTEM INFORMATICA', 'SPEED SYSTEM', 'IREITA',
     'TINTA ESM IND',
     'DIEGO CONCENTINO PELLEGRINI',
+    
+    # NFSE header noise (extracted from Prefeitura headers)
+    'O MUNICIPAL', 'SERIE ELETRONICA', 'DADOS DO PRESTADOR',
+    'DADOS DO TOMADOR', 'CPF CNPJ', 'INSCRICAO MUNICIPAL',
+    'GF AUTO ELETRICA', 'GF AUTO CENTER',  # Tomador, not prestador
     
     # Cross-contamination sources (legitimate OCR false positives)
     # Note: Do NOT add legitimate suppliers here - check known_suppliers.txt first

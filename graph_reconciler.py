@@ -183,14 +183,14 @@ class GraphReconciler:
             node = DocumentNode(
                 id=doc["id"],
                 doc_type=doc.get("doc_type", "UNKNOWN"),
-                amount_cents=doc.get("amount_cents", 0),
+                amount_cents=doc.get("amount_cents") or 0,
                 supplier=doc.get("supplier_clean"),
                 due_date=doc.get("due_date"),
                 payment_date=doc.get("payment_date"),
                 emission_date=doc.get("emission_date"),
                 entity_tag=doc.get("entity_tag"),
-                payment_status=doc.get("payment_status", "UNKNOWN"),
-                original_path=doc.get("original_path", "")
+                payment_status=doc.get("payment_status") or "UNKNOWN",
+                original_path=doc.get("original_path") or ""
             )
             
             self.graph.add_node(
@@ -209,9 +209,59 @@ class GraphReconciler:
         self._create_edges_by_installments()
         self._create_edges_by_barcode()
         
+        # N-to-M: Subset Sum (v3.0)
+        self._create_edges_via_subset_sum()
+        
         logger.info(f"Grafo tem {self.graph.number_of_edges()} arestas")
         
         return self.graph
+    
+    def _create_edges_via_subset_sum(self):
+        """
+        Detecta relações N-para-1 onde N Notas somam ao valor de 1 Boleto.
+        Adiciona arestas com peso alto (0.95) para esses grupos.
+        """
+        nodes = list(self._nodes_map.values())
+        boletos = [n for n in nodes if n.doc_type == "BOLETO" and n.amount_cents > 0]
+        notas = [n for n in nodes if n.doc_type in ["NFE", "NFSE"] and n.amount_cents > 0]
+        
+        # Otimização: Agrupar por fornecedor primeiro
+        boletos_by_supplier = {}
+        notas_by_supplier = {}
+        
+        for n in nodes:
+            if not n.supplier: continue
+            supp_key = n.supplier.upper()[:15]
+            
+            if n.doc_type == "BOLETO":
+                boletos_by_supplier.setdefault(supp_key, []).append(n)
+            elif n.doc_type in ["NFE", "NFSE"]:
+                notas_by_supplier.setdefault(supp_key, []).append(n)
+                
+        # Para cada fornecedor, tenta subset sum
+        for supp, supp_boletos in boletos_by_supplier.items():
+            supp_notas = notas_by_supplier.get(supp, [])
+            if not supp_notas: continue
+            
+            # Tenta encontrar combinação para cada boleto
+            # (Remove notas usadas para evitar duplo uso? Idealmente sim, mas grafo suporta)
+            available_notas = supp_notas[:] 
+            
+            for boleto in supp_boletos:
+                match = self.find_subset_sum_match(
+                    target_value=boleto.amount_cents,
+                    candidates=available_notas,
+                    tolerance=VALUE_TOLERANCE_CENTS
+                )
+                
+                if match:
+                    logger.info(f"Subset Sum Match: {len(match)} notas -> Boleto {boleto.id}")
+                    for nota in match:
+                        if not self.graph.has_edge(nota.id, boleto.id):
+                            self.graph.add_edge(nota.id, boleto.id, weight=0.95, reason="subset_sum")
+                            
+                    # Opcional: Remover notas usadas da pool deste loop para evitar conflitos
+                    # available_notas = [n for n in available_notas if n not in match]
     
     def _load_all_documents(self) -> List[Dict]:
         """Carrega todos os documentos com transacoes."""
@@ -354,6 +404,7 @@ class GraphReconciler:
         
         logger.info(f"Encontradas {len(components)} ilhas de transacao")
         
+        initial_islands = []
         for component in components:
             # Extrai subgrafo
             subgraph = self.graph.subgraph(component)
@@ -366,8 +417,14 @@ class GraphReconciler:
             island.determine_master_date()
             island.confidence = self._calculate_island_confidence(island)
             
-            result.islands.append(island)
+            initial_islands.append(island)
             
+        # Refina ilhas complexas (Hungarian Algorithm)
+        final_islands = self._refine_complex_islands(initial_islands)
+        result.islands = final_islands
+        
+        # Recalcula estatísticas
+        for island in result.islands:
             if island.is_complete:
                 result.complete_islands += 1
             else:
@@ -423,9 +480,105 @@ class GraphReconciler:
         
         return None
     
+        return None
+    
     # ==========================================================================
-    # VINCULACAO MANUAL
+    # REFINE VIA HUNGARIAN ALGORITHM (v3.0)
     # ==========================================================================
+    
+    def _refine_complex_islands(self, islands: List[TransactionIsland]) -> List[TransactionIsland]:
+        """
+        Refina ilhas complexas (M Notas x N Boletos) usando Algoritmo Húngaro.
+        Tenta quebrar componentes conexos grandes em pares 1-to-1 otimizados.
+        """
+        refined_islands = []
+        
+        for island in islands:
+            # Só processa se tiver >1 Boleto e >1 Nota (conflito potencial)
+            if island.total_boletos > 1 and island.total_notas > 1:
+                logger.info(f"Refinando ilha complexa: {island.total_notas}N x {island.total_boletos}B")
+                sub_islands = self._split_via_hungarian(island)
+                if sub_islands:
+                    refined_islands.extend(sub_islands)
+                    continue
+            
+            # Se não processou ou falhou, mantem original
+            refined_islands.append(island)
+            
+        return refined_islands
+
+    def _split_via_hungarian(self, island: TransactionIsland) -> List[TransactionIsland]:
+        """Aplica linear_sum_assignment para dividir ilha."""
+        try:
+            from scipy.optimize import linear_sum_assignment
+            import numpy as np
+        except ImportError:
+            logger.warning("scipy não disponível para Hungarian Algorithm")
+            return None
+
+        # Separa listas
+        notas = [n for n in island.nodes if n.doc_type in ["NFE", "NFSE"]]
+        boletos = [n for n in island.nodes if n.doc_type == "BOLETO"]
+        others = [n for n in island.nodes if n not in notas and n not in boletos]
+        
+        if not notas or not boletos:
+            return None
+            
+        # Matriz de Custo (Cost = 1 - Confidence)
+        # Notas nas linhas, Boletos nas colunas
+        cost_matrix = np.ones((len(notas), len(boletos)))
+        
+        for i, nota in enumerate(notas):
+            for j, boleto in enumerate(boletos):
+                # Peso da aresta se existir
+                edge_data = self.graph.get_edge_data(nota.id, boleto.id)
+                confidence = edge_data.get("weight", 0.0) if edge_data else 0.0
+                
+                # Penalidade extra se valores diferirem muito (caso a aresta não exista)
+                if not edge_data and abs(nota.amount_cents - boleto.amount_cents) > VALUE_TOLERANCE_CENTS:
+                    confidence = 0.0
+                
+                cost_matrix[i, j] = 1.0 - confidence
+                
+        # Resolve Assignment
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        
+        # Reconstrói ilhas
+        new_islands = []
+        assigned_nodes = set()
+        
+        # Assignments (Nota -> Boleto)
+        for i, j in zip(row_ind, col_ind):
+            # Valida se o custo não é proibitivo (match ruim forçado)
+            if cost_matrix[i, j] > 0.9: # Confiança < 0.1
+                continue
+                
+            nota = notas[i]
+            boleto = boletos[j]
+            
+            # Cria pares isolados
+            # Arestas originais entre eles
+            edges = []
+            if self.graph.has_edge(nota.id, boleto.id):
+                edges.append((nota.id, boleto.id, self.graph[nota.id][boleto.id]))
+            
+            # Cria nova ilha
+            new_island = TransactionIsland(nodes=[nota, boleto], edges=edges)
+            new_island.determine_master_date()
+            new_island.confidence = 1.0 - cost_matrix[i, j] # Recupera confiança real
+            
+            new_islands.append(new_island)
+            assigned_nodes.add(nota.id)
+            assigned_nodes.add(boleto.id)
+            
+        # Adiciona Orfãos (que não tiveram match válido)
+        orphans = [n for n in island.nodes if n.id not in assigned_nodes]
+        if orphans:
+            # Cria ilha de orfãos (com arestas internas se existirem?)
+            # Para simplificar, sem arestas (são orfãos da separação)
+            new_islands.append(TransactionIsland(nodes=orphans, edges=[]))
+            
+        return new_islands
     
     def force_link(
         self, 
