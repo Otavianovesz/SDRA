@@ -22,6 +22,9 @@ from typing import Optional, List, Dict, Any, Tuple, Generator
 from dataclasses import dataclass
 from enum import Enum
 
+import config
+from resource_manager import get_resource_manager
+
 # Importa o modulo de banco de dados
 from database import (
     SRDADatabase,
@@ -433,6 +436,30 @@ class CognitiveScanner:
         
         return None
     
+    def _parse_date(self, date_str: str) -> Optional[str]:
+        """
+        Converte string de data para formato ISO (YYYY-MM-DD).
+        
+        Aceita formatos: DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+        """
+        if not date_str:
+            return None
+        
+        # Padrão brasileiro
+        import re
+        match = re.match(r'(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})', date_str)
+        if match:
+            day, month, year = match.groups()
+            # Normaliza ano de 2 dígitos
+            if len(year) == 2:
+                year = '20' + year if int(year) < 50 else '19' + year
+            try:
+                return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+            except:
+                pass
+        
+        return None
+    
     def extract_due_date(self, text: str) -> Optional[str]:
         """Extrai data de vencimento especificamente."""
         match = REGEX_PATTERNS["due_date"].search(text)
@@ -475,20 +502,56 @@ class CognitiveScanner:
         Returns:
             EntityTag.VG, EntityTag.MV ou None
         """
-        # Busca CPFs no texto
-        cpf_matches = REGEX_PATTERNS["cpf"].findall(text)
+        text_upper = text.upper()
         
+        # 1. Busca CPFs conhecidos (mais confiável)
+        cpf_matches = REGEX_PATTERNS["cpf"].findall(text)
         for cpf in cpf_matches:
             entity = SRDADatabase.parse_cpf_to_entity(cpf)
             if entity:
                 return entity
         
-        # Fallback: busca nomes conhecidos
-        text_upper = text.upper()
-        if "VAGNER" in text_upper:
-            return EntityTag.VG
-        if "MARCELLI" in text_upper:
-            return EntityTag.MV
+        # 2. Busca nomes conhecidos de sócios/empresas
+        # VG - Vagner / Vesz Participações
+        vg_keywords = ["VAGNER", "VESZ PARTICIPACOES", "VESZ PARTIC"]
+        for kw in vg_keywords:
+            if kw in text_upper:
+                return EntityTag.VG
+        
+        # MV - Marcelli / Mauro
+        mv_keywords = ["MARCELLI", "MAURO VESZ", "M V AGRO"]
+        for kw in mv_keywords:
+            if kw in text_upper:
+                return EntityTag.MV
+        
+        # 3. Busca CNPJ do SACADO/DESTINATÁRIO (quem paga)
+        # Apenas aceita CNPJ se estiver próximo de "SACADO" ou "PAGADOR"
+        sacado_section = ""
+        for marker in ["SACADO", "PAGADOR", "DESTINAT"]:
+            idx = text_upper.find(marker)
+            if idx != -1:
+                sacado_section = text[idx:idx+200]  # Próximos 200 chars
+                break
+        
+        if sacado_section:
+            # CNPJs conhecidos para VG e MV (empresas pagadoras)
+            VG_CNPJS = {
+                "01.696.819",  # Vesz Participacoes
+                "04.176.760",  # Outros VG  
+            }
+            MV_CNPJS = {
+                # Adicionar CNPJ da empresa MV quando souber
+            }
+            
+            cnpj_matches = REGEX_PATTERNS["cnpj"].findall(sacado_section)
+            for cnpj in cnpj_matches:
+                cnpj_clean = cnpj.replace('.', '').replace('/', '').replace('-', '').replace(' ', '')
+                if len(cnpj_clean) >= 8:
+                    prefix = f"{cnpj_clean[:2]}.{cnpj_clean[2:5]}.{cnpj_clean[5:8]}"
+                    if prefix in MV_CNPJS:
+                        return EntityTag.MV
+                    if prefix in VG_CNPJS:
+                        return EntityTag.VG
         
         return None
     
@@ -520,6 +583,293 @@ class CognitiveScanner:
             })
         
         return duplicatas
+    
+    # ==========================================================================
+    # HIERARCHICAL EXTRACTION (8GB RAM OPTIMIZED)
+    # ==========================================================================
+    
+    def hierarchical_extract(
+        self, 
+        file_path: Path,
+        page_num: int = 0,
+        doc_type: DocumentType = DocumentType.UNKNOWN
+    ) -> Dict[str, Any]:
+        """
+        Step-by-Step Extraction Algorithm (8GB RAM Survival Mode).
+        
+        Priority: Native Text > Regex > Paddle > VLM (last resort)
+        
+        Algorithm:
+        1. Extract native PDF text (free, fast)
+        2. Run regex for CNPJ/Date/Amount
+        3. If confidence > 0.9 -> RETURN (skip OCR)
+        4. If confidence low -> run PaddleOCR at 150 DPI
+        5. If still low -> run VLM at 300 DPI (last resort)
+        6. Cleanup memory after each stage
+        
+        Args:
+            file_path: Path to PDF
+            page_num: Page to process (0-indexed)
+            doc_type: Expected document type
+            
+        Returns:
+            Dict with extracted data and confidence scores
+        """
+        result = {
+            "amount_cents": 0,
+            "due_date": None,
+            "emission_date": None,
+            "supplier_name": None,
+            "cnpj": None,
+            "entity_tag": None,
+            "confidence": 0.0,
+            "extraction_path": "none",  # fast/slow/heavy
+            "needs_review": False
+        }
+        
+        try:
+            doc = fitz.open(str(file_path))
+            if page_num >= len(doc):
+                doc.close()
+                return result
+            
+            page = doc[page_num]
+            
+            # ================================================================
+            # STEP 1: FAST PATH - Native Text + Spatial Extraction (FREE)
+            # ================================================================
+            native_text = page.get_text()
+            text_length = len(native_text.strip())
+            
+            print(f"    [FAST] Native text: {text_length} chars")
+            
+            if text_length >= 100:
+                # Good text layer - use Spatial Extraction first, then regex fallback
+                result["extraction_path"] = "fast"
+                
+                # Try SpatialExtractor for anchor-based extraction
+                spatial_results = {}
+                try:
+                    from spatial_extractor import get_spatial_extractor
+                    spatial = get_spatial_extractor()
+                    
+                    if spatial.load_pdf(file_path, page_num):
+                        spatial_results = spatial.extract_all()
+                        
+                        # Use spatial results if available
+                        if 'amount' in spatial_results:
+                            result["amount_cents"] = SRDADatabase.amount_to_cents(
+                                spatial_results['amount'].value
+                            )
+                        if 'due_date' in spatial_results:
+                            result["due_date"] = self._parse_date(
+                                spatial_results['due_date'].value
+                            )
+                        if 'emission_date' in spatial_results:
+                            result["emission_date"] = self._parse_date(
+                                spatial_results['emission_date'].value
+                            )
+                        if 'cnpj_emissor' in spatial_results:
+                            result["cnpj"] = spatial_results['cnpj_emissor'].value
+                        
+                        print(f"    [FAST] Spatial extracted {len(spatial_results)} fields")
+                except Exception as e:
+                    print(f"    [FAST] Spatial extraction failed: {e}")
+                
+                # Fallback/supplement with regex for missing fields
+                if result["amount_cents"] == 0:
+                    amount = self.extract_amount(native_text)
+                    result["amount_cents"] = amount
+                
+                if not result["due_date"]:
+                    due_date = self.extract_due_date(native_text)
+                    result["due_date"] = due_date
+                
+                if not result["emission_date"]:
+                    emission_date = self.extract_emission_date(native_text)
+                    result["emission_date"] = emission_date
+                
+                if not result["cnpj"]:
+                    cnpj_match = REGEX_PATTERNS["cnpj"].search(native_text)
+                    if cnpj_match:
+                        result["cnpj"] = cnpj_match.group(1)
+                
+                # Always extract entity from text
+                entity = self.extract_entity(native_text)
+                result["entity_tag"] = entity
+                
+                # Calculate confidence based on what we found
+                confidence = 0.0
+                if result["amount_cents"] > 0:
+                    # Higher confidence if from spatial extraction
+                    conf_boost = 0.35 if 'amount' in spatial_results else 0.3
+                    confidence += conf_boost
+                if result["due_date"] or result["emission_date"]:
+                    conf_boost = 0.35 if 'due_date' in spatial_results else 0.3
+                    confidence += conf_boost
+                if result["cnpj"]:
+                    conf_boost = 0.25 if 'cnpj_emissor' in spatial_results else 0.2
+                    confidence += conf_boost
+                if entity:
+                    confidence += 0.1
+                
+                result["confidence"] = min(confidence, 1.0)
+                
+                # If high confidence, we're done
+                if result["confidence"] >= 0.9:
+                    print(f"    [FAST] High confidence ({result['confidence']:.2f}), skipping OCR")
+                    doc.close()
+                    return result
+            
+            # ================================================================
+            # STEP 2: SLOW PATH - PaddleOCR at 150 DPI
+            # ================================================================
+            if text_length < 100 or result["confidence"] < 0.7:
+                print(f"    [SLOW] Running PaddleOCR...")
+                result["extraction_path"] = "slow"
+                
+                try:
+                    # Render at 150 DPI (1.5x)
+                    matrix = fitz.Matrix(1.5, 1.5)
+                    pix = page.get_pixmap(matrix=matrix)
+                    
+                    from PIL import Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    del pix  # Free memory
+                    
+                    # Try PaddleOCR
+                    try:
+                        from paddle_voter import get_paddle_voter
+                        paddle = get_paddle_voter()
+                        ocr_text = paddle.extract_text(img)
+                        
+                        if ocr_text and len(ocr_text) > len(native_text):
+                            # Run regex on OCR text
+                            amount = self.extract_amount(ocr_text)
+                            due_date = self.extract_due_date(ocr_text)
+                            emission_date = self.extract_emission_date(ocr_text)
+                            cnpj_match = REGEX_PATTERNS["cnpj"].search(ocr_text)
+                            
+                            # Update if better
+                            if amount > result["amount_cents"]:
+                                result["amount_cents"] = amount
+                            if due_date and not result["due_date"]:
+                                result["due_date"] = due_date
+                            if emission_date and not result["emission_date"]:
+                                result["emission_date"] = emission_date
+                            if cnpj_match and not result["cnpj"]:
+                                result["cnpj"] = cnpj_match.group(1)
+                            
+                            # Recalculate confidence
+                            confidence = 0.0
+                            if result["amount_cents"] > 0:
+                                confidence += 0.3
+                            if result["due_date"] or result["emission_date"]:
+                                confidence += 0.3
+                            if result["cnpj"]:
+                                confidence += 0.3
+                            
+                            result["confidence"] = confidence
+                            print(f"    [SLOW] Paddle confidence: {confidence:.2f}")
+                        
+                        # Cleanup paddle
+                        paddle.unload_model()
+                        
+                    except ImportError:
+                        print("    [SLOW] PaddleOCR not available")
+                    
+                    del img
+                    gc.collect()
+                    
+                    # Check if we need heavy path
+                    if result["confidence"] >= 0.7:
+                        doc.close()
+                        return result
+                        
+                except Exception as e:
+                    print(f"    [SLOW] Error: {e}")
+            
+            # ================================================================
+            # STEP 3: HEAVY PATH - VLM at 300 DPI (Last Resort)
+            # ================================================================
+            if result["confidence"] < 0.7:
+                print(f"    [HEAVY] Running VLM (last resort)...")
+                result["extraction_path"] = "heavy"
+                result["needs_review"] = True  # Flag for human review
+                
+                try:
+                    # Render at 300 DPI (2x)
+                    matrix = fitz.Matrix(2.0, 2.0)
+                    pix = page.get_pixmap(matrix=matrix)
+                    
+                    from PIL import Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    del pix
+                    
+                    # Try Florence-2 first (lighter)
+                    vlm_text = ""
+                    try:
+                        from florence2_voter import get_florence2_voter
+                        florence = get_florence2_voter()
+                        vlm_text = florence.extract_text(img)
+                        florence.unload_model()
+                    except Exception as e:
+                        print(f"    [HEAVY] Florence-2 failed: {e}")
+                    
+                    # If Florence failed, try Surya
+                    if not vlm_text or len(vlm_text) < 50:
+                        try:
+                            from surya_voter import get_surya_voter
+                            surya = get_surya_voter()
+                            surya_result = surya.extract_text_with_layout(img)
+                            if surya_result:
+                                vlm_text = surya_result.text
+                            surya.unload_model()
+                        except Exception as e:
+                            print(f"    [HEAVY] Surya failed: {e}")
+                    
+                    if vlm_text:
+                        # Final regex extraction
+                        amount = self.extract_amount(vlm_text)
+                        due_date = self.extract_due_date(vlm_text)
+                        cnpj_match = REGEX_PATTERNS["cnpj"].search(vlm_text)
+                        
+                        if amount > result["amount_cents"]:
+                            result["amount_cents"] = amount
+                        if due_date and not result["due_date"]:
+                            result["due_date"] = due_date
+                        if cnpj_match and not result["cnpj"]:
+                            result["cnpj"] = cnpj_match.group(1)
+                        
+                        # Final confidence
+                        confidence = 0.0
+                        if result["amount_cents"] > 0:
+                            confidence += 0.35
+                        if result["due_date"]:
+                            confidence += 0.35
+                        if result["cnpj"]:
+                            confidence += 0.3
+                        
+                        result["confidence"] = confidence
+                        print(f"    [HEAVY] VLM confidence: {confidence:.2f}")
+                    
+                    del img
+                    gc.collect()
+                    gc.collect()
+                    
+                except Exception as e:
+                    print(f"    [HEAVY] Error: {e}")
+            
+            doc.close()
+            
+        except Exception as e:
+            print(f"    [ERROR] Hierarchical extract failed: {e}")
+        
+        finally:
+            # Final cleanup
+            get_resource_manager().force_cleanup()
+        
+        return result
     
     # ==========================================================================
     # PROCESSAMENTO DE PDF
@@ -734,46 +1084,38 @@ class CognitiveScanner:
                         is_scheduled = True
                 
                 # Se EnsembleExtractor disponivel, usa extracao avancada
-                if self.ensemble:
-                    try:
-                        ensemble_result = self.ensemble.extract_from_pdf(
-                            str(file_path),
-                            page_range=(segment.page_start, segment.page_end)
-                        )
+                # Se EnsembleExtractor disponivel, usa extracao avancada
+                # FIX: Usar hierarchical_extract (Pipeline 8GB Survival de 3 Estágios)
+                try:
+                    # Usa o pipeline otimizado em vez do ensemble direto
+                    extraction_result = self.hierarchical_extract(
+                        file_path=file_path,
+                        page_num=segment.page_start - 1, # 0-indexed
+                        doc_type=segment.doc_type
+                    )
+                    
+                    # Mapeia resultados
+                    if extraction_result["amount_cents"] > 0:
+                        amount = extraction_result["amount_cents"]
+                    
+                    if extraction_result["due_date"]:
+                        due_date = extraction_result["due_date"]
+                    
+                    if extraction_result["emission_date"]:
+                        emission_date = extraction_result["emission_date"]
                         
-                        # Usa resultados do ensemble se disponiveis
-                        if ensemble_result:
-                            # Fornecedor (melhor extracao)
-                            if ensemble_result.fornecedor:
-                                supplier_name = ensemble_result.fornecedor
-                            
-                            # Valor (ensemble tem padroes mais sofisticados)
-                            if ensemble_result.amount_cents > 0:
-                                amount = ensemble_result.amount_cents
-                            
-                            # Datas (ensemble prioriza corretamente)
-                            if ensemble_result.due_date:
-                                due_date = ensemble_result.due_date
-                            if ensemble_result.emission_date:
-                                emission_date = ensemble_result.emission_date
-                            
-                            # Numero do documento
-                            if ensemble_result.doc_number:
-                                doc_number = ensemble_result.doc_number
-                            
-                            # Entidade (se nao encontrado antes)
-                            if not entity and ensemble_result.entity_tag:
-                                entity = EntityTag(ensemble_result.entity_tag)
-                            
-                            # Agendamento
-                            if ensemble_result.is_scheduled:
-                                is_scheduled = True
-                            
-                            # Log de metodo de extracao
-                            method = ensemble_result.extraction_sources.get("method", "native")
-                            print(f"    [ENSEMBLE] Método: {method} | Fornecedor: {supplier_name or '?'}")
-                    except Exception as e:
-                        print(f"    [AVISO] Ensemble falhou, usando basico: {e}")
+                    if extraction_result["cnpj"]:
+                        # Tenta encontrar entidade pelo CNPJ
+                        pass # Ja tratado na extracao de entidade
+                    
+                    # Fornecedor/CNPJ (TODO: Melhorar mapeamento)
+                    if extraction_result.get("supplier_name"):
+                         supplier_name = extraction_result["supplier_name"]
+                    
+                    print(f"    [PIPELINE] Tipo: {extraction_result['extraction_path']} | Confiança: {extraction_result['confidence']:.2f}")
+
+                except Exception as e:
+                     print(f"    [AVISO] Pipeline falhou, usando basico: {e}")
                 
                 # Para BOLETOs, tenta barcode extractor para dados precisos
                 if segment.doc_type == DocumentType.BOLETO and self.barcode_extractor:

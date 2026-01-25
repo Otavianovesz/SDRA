@@ -67,6 +67,8 @@ class MatchType(Enum):
 KNOWN_CPFS = {
     "96412844015": EntityTag.VG,      # Vagner
     "964.128.440-15": EntityTag.VG,   # Vagner (formatado)
+    "89602692120": EntityTag.MV,      # Marceli
+    "896.026.921-20": EntityTag.MV,   # Marceli (formatado)
 }
 
 

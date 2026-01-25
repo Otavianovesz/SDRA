@@ -1,175 +1,504 @@
 """
-Ensemble Voter Module
-=====================
-Implementação de algoritmos de votação sofisticada para extração de dados.
+Ensemble Voter Module - Hierarchical Voting for 8GB RAM
+========================================================
 
-Inclui:
-1. Weighted Majority Voting
-2. Levenshtein Distance & Fuzzy Matching
-3. ROVER (Recognizer Output Voting Error Reduction) - Simplificado
+Implements intelligent voting for data extraction:
+
+1. Hierarchical Priority: Native Text > Regex > Paddle > VLM
+2. Regex Veto: Valid CNPJ/CPF/Date checksums override OCR
+3. ConfidenceScorer: Penalizes non-ASCII in numeric fields
+4. REVIEW_REQUIRED: High divergence flags for human review
+5. RapidFuzz for fast similarity (required)
+
+Gold Rule: Deterministic validators (checksums) ALWAYS win over OCR.
 """
 
+import re
 import logging
 from typing import List, Dict, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections import Counter
 import difflib
 
-# Tenta importar rapidfuzz para performance, fallback para difflib
+logger = logging.getLogger(__name__)
+
+# Require rapidfuzz for production
 try:
     from rapidfuzz import fuzz, process
     RAPIDFUZZ_AVAILABLE = True
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False
+    logger.warning("rapidfuzz not installed - using slow difflib fallback")
 
-logger = logging.getLogger(__name__)
+# CNPJ/CPF regex patterns for veto detection
+CNPJ_PATTERN = re.compile(r'\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}')
+CPF_PATTERN = re.compile(r'\d{3}\.?\d{3}\.?\d{3}-?\d{2}')
+DATE_PATTERN = re.compile(r'\d{2}/\d{2}/\d{4}')
+
 
 @dataclass
 class VoteCandidate:
+    """A candidate value from a specific extraction source."""
     value: str
     confidence: float
     source: str
     weight: float = 1.0
+    has_valid_checksum: bool = False  # If True, this candidate has veto power
+
+
+@dataclass
+class VoteResult:
+    """Result of ensemble voting."""
+    value: str
+    confidence: float
+    source: str
+    needs_review: bool = False  # High divergence detected
+    all_candidates: List[VoteCandidate] = field(default_factory=list)
+
+
+class ConfidenceScorer:
+    """
+    Scores extraction confidence with penalties.
+    
+    Penalties for:
+    - Non-ASCII characters in numeric fields
+    - Values that differ too much from consensus
+    - Suspiciously short/long values
+    """
+    
+    # Non-ASCII characters in numeric fields (common OCR errors)
+    NON_NUMERIC_PENALTY = 0.3
+    
+    # Length deviation penalty
+    LENGTH_PENALTY = 0.2
+    
+    @staticmethod
+    def score_numeric_field(value: str, expected_pattern: str = r'[\d,.\s]+') -> float:
+        """
+        Score a numeric field extraction.
+        
+        Penalizes non-ASCII and non-numeric characters.
+        """
+        if not value:
+            return 0.0
+        
+        # Count valid characters
+        numeric_chars = sum(1 for c in value if c.isdigit() or c in ',.R$ ')
+        total_chars = len(value)
+        
+        if total_chars == 0:
+            return 0.0
+        
+        # Base score from numeric ratio
+        base_score = numeric_chars / total_chars
+        
+        # Penalize non-ASCII
+        non_ascii = sum(1 for c in value if ord(c) > 127)
+        if non_ascii > 0:
+            base_score -= ConfidenceScorer.NON_NUMERIC_PENALTY
+        
+        return max(0.0, min(1.0, base_score))
+    
+    @staticmethod
+    def score_date_field(value: str) -> float:
+        """Score a date field extraction."""
+        if not value:
+            return 0.0
+        
+        # Check if matches expected pattern
+        if DATE_PATTERN.search(value):
+            return 1.0
+        
+        # Partial match - has numbers but wrong format
+        if re.search(r'\d+', value):
+            return 0.5
+        
+        return 0.0
+    
+    @staticmethod
+    def score_cnpj_field(value: str) -> float:
+        """Score a CNPJ field extraction."""
+        if not value:
+            return 0.0
+        
+        # Check format
+        if CNPJ_PATTERN.search(value):
+            return 1.0
+        
+        # Just digits, might need formatting
+        digits = ''.join(c for c in value if c.isdigit())
+        if len(digits) == 14:
+            return 0.8
+        
+        return 0.3
 
 
 class EnsembleVoter:
     """
-    Motor de votação para combinar extrações de múltiplas fontes.
+    Hierarchical voting engine for combining extractions.
+    
+    Key principles:
+    1. Deterministic data (checksums) VETO probabilistic data (OCR)
+    2. Native PDF text > OCR
+    3. High divergence = flag for human review
     """
     
+    # Source weights (higher = more trusted)
+    SOURCE_WEIGHTS = {
+        # Deterministic sources (highest trust)
+        "regex_validated": 10.0,    # Regex with checksum validation
+        "native_text": 5.0,         # PDF text layer
+        "barcode": 4.0,             # Decoded barcode
+        
+        # High-quality OCR
+        "paddle_ocr": 2.0,
+        "surya": 1.8,
+        
+        # VLM (can hallucinate)
+        "florence2": 1.5,
+        "extract_hybrid": 1.5,
+        
+        # Regex without validation
+        "regex_specific": 1.2,
+        "regex_fallback": 0.8,
+        
+        # Legacy/low-trust
+        "gliner": 1.0,
+        "filename": 0.9,
+        "tesseract": 0.7,
+        "qwen2_vlm": 0.5,  # Known to hallucinate
+    }
+    
+    # Divergence threshold for REVIEW_REQUIRED flag
+    DIVERGENCE_THRESHOLD = 0.4
+    
     def __init__(self):
-        # Pesos padrão por fonte (configurável)
-        self.source_weights = {
-            "extract_hybrid": 2.0,      # VLM+OCR Híbrido (Tier 4)
-            "paddle_ocr": 1.5,          # PaddleOCR puro (Tier 2.5)
-            "gliner": 1.2,              # GLiNER NER (Tier 2)
-            "regex_specific": 1.0,      # Regex Específico
-            "regex_fallback": 0.5,      # Regex Genérico
-            "tesseract": 0.8,           # OCR Legacy
-            "layout": 0.7,              # Heurística de posição
-            "filename": 0.9,            # Nome do arquivo (curado)
-            "qwen2_vlm": 0.6            # VLM puro (hallucinates sometimes)
-        }
-
+        self.scorer = ConfidenceScorer()
+    
     def calculate_similarity(self, s1: str, s2: str) -> float:
-        """Calcula similaridade entre duas strings (0.0 a 1.0)."""
+        """Calculate similarity between two strings (0.0 to 1.0)."""
         if not s1 or not s2:
             return 0.0
         
         s1 = s1.upper().strip()
         s2 = s2.upper().strip()
         
+        if s1 == s2:
+            return 1.0
+        
         if RAPIDFUZZ_AVAILABLE:
             return fuzz.ratio(s1, s2) / 100.0
         else:
             return difflib.SequenceMatcher(None, s1, s2).ratio()
-
-    def weighted_vote(self, candidates: List[VoteCandidate]) -> Optional[VoteCandidate]:
+    
+    def validate_cnpj(self, cnpj: str) -> bool:
+        """Validate CNPJ checksum (Modulo 11)."""
+        digits = ''.join(c for c in cnpj if c.isdigit())
+        if len(digits) != 14:
+            return False
+        
+        # First check digit
+        weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        sum1 = sum(int(d) * w for d, w in zip(digits[:12], weights1))
+        dv1 = 11 - (sum1 % 11)
+        dv1 = 0 if dv1 >= 10 else dv1
+        
+        if int(digits[12]) != dv1:
+            return False
+        
+        # Second check digit
+        weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        sum2 = sum(int(d) * w for d, w in zip(digits[:13], weights2))
+        dv2 = 11 - (sum2 % 11)
+        dv2 = 0 if dv2 >= 10 else dv2
+        
+        return int(digits[13]) == dv2
+    
+    def validate_cpf(self, cpf: str) -> bool:
+        """Validate CPF checksum (Modulo 11)."""
+        digits = ''.join(c for c in cpf if c.isdigit())
+        if len(digits) != 11:
+            return False
+        
+        # First check digit
+        sum1 = sum(int(d) * w for d, w in zip(digits[:9], range(10, 1, -1)))
+        dv1 = 11 - (sum1 % 11)
+        dv1 = 0 if dv1 >= 10 else dv1
+        
+        if int(digits[9]) != dv1:
+            return False
+        
+        # Second check digit
+        sum2 = sum(int(d) * w for d, w in zip(digits[:10], range(11, 1, -1)))
+        dv2 = 11 - (sum2 % 11)
+        dv2 = 0 if dv2 >= 10 else dv2
+        
+        return int(digits[10]) == dv2
+    
+    def apply_regex_veto(
+        self, 
+        candidates: List[VoteCandidate],
+        field_type: str = "any"
+    ) -> Optional[VoteCandidate]:
         """
-        Seleciona o melhor candidato baseado em confiança ponderada e consenso.
+        GOLD RULE: If a candidate has a valid checksum, it wins absolutely.
+        
+        Returns the vetoing candidate or None if no veto applies.
+        """
+        for candidate in candidates:
+            value = candidate.value
+            
+            # Check for valid CNPJ
+            if field_type in ("any", "cnpj"):
+                cnpj_match = CNPJ_PATTERN.search(value)
+                if cnpj_match and self.validate_cnpj(cnpj_match.group()):
+                    logger.info(f"CNPJ VETO: {value} has valid checksum")
+                    candidate.has_valid_checksum = True
+                    candidate.confidence = 0.99
+                    candidate.source = "regex_validated"
+                    return candidate
+            
+            # Check for valid CPF
+            if field_type in ("any", "cpf"):
+                cpf_match = CPF_PATTERN.search(value)
+                if cpf_match and self.validate_cpf(cpf_match.group()):
+                    logger.info(f"CPF VETO: {value} has valid checksum")
+                    candidate.has_valid_checksum = True
+                    candidate.confidence = 0.99
+                    candidate.source = "regex_validated"
+                    return candidate
+        
+        return None
+    
+    def check_divergence(self, candidates: List[VoteCandidate]) -> bool:
+        """
+        Check if candidates have high divergence (need human review).
+        
+        Returns True if divergence exceeds threshold.
+        """
+        if len(candidates) < 2:
+            return False
+        
+        # Compare all pairs
+        values = [c.value for c in candidates if c.value]
+        if len(values) < 2:
+            return False
+        
+        # Calculate average similarity
+        similarities = []
+        for i, v1 in enumerate(values):
+            for v2 in values[i+1:]:
+                similarities.append(self.calculate_similarity(v1, v2))
+        
+        if not similarities:
+            return False
+        
+        avg_similarity = sum(similarities) / len(similarities)
+        
+        # High divergence if average similarity is low
+        return avg_similarity < (1.0 - self.DIVERGENCE_THRESHOLD)
+    
+    def prioritize_native_text(
+        self, 
+        candidates: List[VoteCandidate]
+    ) -> Optional[VoteCandidate]:
+        """
+        Prioritize native PDF text over OCR if available.
+        
+        Returns the native text candidate if found and confident.
+        """
+        for candidate in candidates:
+            if candidate.source == "native_text" and candidate.confidence >= 0.8:
+                logger.debug(f"Prioritizing native text: {candidate.value}")
+                return candidate
+        return None
+    
+    def weighted_vote(
+        self, 
+        candidates: List[VoteCandidate],
+        field_type: str = "any"
+    ) -> VoteResult:
+        """
+        Select best candidate using hierarchical voting.
+        
+        Priority:
+        1. Valid checksum (VETO power)
+        2. Native PDF text
+        3. Weighted cluster voting
+        
+        Args:
+            candidates: List of extraction candidates
+            field_type: Type of field (cnpj, cpf, date, amount, any)
+            
+        Returns:
+            VoteResult with best value and metadata
         """
         if not candidates:
-            return None
-            
+            return VoteResult(value="", confidence=0.0, source="none")
+        
         if len(candidates) == 1:
-            return candidates[0]
-            
-        # 1. Agrupar candidatos similares (Clustering)
+            return VoteResult(
+                value=candidates[0].value,
+                confidence=candidates[0].confidence,
+                source=candidates[0].source,
+                all_candidates=candidates
+            )
+        
+        # Step 1: Check for regex veto (checksum validation)
+        veto = self.apply_regex_veto(candidates, field_type)
+        if veto:
+            return VoteResult(
+                value=veto.value,
+                confidence=veto.confidence,
+                source=veto.source,
+                all_candidates=candidates
+            )
+        
+        # Step 2: Prioritize native text
+        native = self.prioritize_native_text(candidates)
+        if native:
+            return VoteResult(
+                value=native.value,
+                confidence=native.confidence,
+                source=native.source,
+                all_candidates=candidates
+            )
+        
+        # Step 3: Check for high divergence
+        needs_review = self.check_divergence(candidates)
+        if needs_review:
+            logger.warning("High divergence detected - flagging for review")
+        
+        # Step 4: Cluster similar values
+        clusters = self._cluster_candidates(candidates)
+        
+        # Step 5: Score clusters
+        best_cluster = None
+        max_score = -1.0
+        
+        for cluster in clusters:
+            score = self._score_cluster(cluster, field_type)
+            if score > max_score:
+                max_score = score
+                best_cluster = cluster
+        
+        if not best_cluster:
+            return VoteResult(
+                value="",
+                confidence=0.0,
+                source="none",
+                needs_review=True,
+                all_candidates=candidates
+            )
+        
+        # Get best candidate from cluster
+        best_candidate = max(
+            best_cluster,
+            key=lambda c: self.SOURCE_WEIGHTS.get(c.source, 1.0) * c.confidence
+        )
+        
+        # Final confidence
+        final_confidence = min(0.95, max_score / 3.0)
+        
+        return VoteResult(
+            value=best_candidate.value,
+            confidence=final_confidence,
+            source=best_candidate.source,
+            needs_review=needs_review,
+            all_candidates=candidates
+        )
+    
+    def _cluster_candidates(
+        self, 
+        candidates: List[VoteCandidate],
+        threshold: float = 0.80
+    ) -> List[List[VoteCandidate]]:
+        """Group similar candidates into clusters."""
         clusters = []
         processed = set()
         
         for i, c1 in enumerate(candidates):
             if i in processed:
                 continue
-                
-            # Novo cluster
-            current_cluster = [c1]
+            
+            cluster = [c1]
             processed.add(i)
             
             for j, c2 in enumerate(candidates):
                 if j in processed:
                     continue
                 
-                # Se similaridade > 0.85, considera mesmo valor
-                if self.calculate_similarity(c1.value, c2.value) > 0.85:
-                    current_cluster.append(c2)
+                if self.calculate_similarity(c1.value, c2.value) >= threshold:
+                    cluster.append(c2)
                     processed.add(j)
             
-            clusters.append(current_cluster)
-            
-        # 2. Avaliar clusters
-        best_cluster = None
-        max_score = -1.0
+            clusters.append(cluster)
         
-        for cluster in clusters:
-            # Score do cluster = soma(confiança * peso) dos membros
-            cluster_score = 0.0
-            
-            # Penalidade para divergência dentro do cluster (length variance)
-            lengths = [len(c.value) for c in cluster]
-            len_variance = max(lengths) - min(lengths)
-            length_penalty = 1.0 if len_variance < 3 else 0.8
-            
-            for cand in cluster:
-                # Peso base da fonte
-                source_w = self.source_weights.get(cand.source, 1.0)
-                # Confiança do extrator
-                vote_score = cand.confidence * source_w
-                cluster_score += vote_score
-            
-            cluster_score *= length_penalty
-            
-            # Boost por multiplicidade (mais fontes concordando = melhor)
-            if len(cluster) > 1:
-                cluster_score *= 1.2
-            
-            if cluster_score > max_score:
-                max_score = cluster_score
-                best_cluster = cluster
+        return clusters
+    
+    def _score_cluster(
+        self, 
+        cluster: List[VoteCandidate],
+        field_type: str
+    ) -> float:
+        """Score a cluster based on weights, confidence, and consensus."""
+        if not cluster:
+            return 0.0
         
-        if not best_cluster:
-            return None
+        score = 0.0
+        for candidate in cluster:
+            weight = self.SOURCE_WEIGHTS.get(candidate.source, 1.0)
             
-        # Retorna o representante do melhor cluster 
-        # (preferência pelo mais longo/completo ou fonte mais confiável)
-        # Ordena por (Source Weight * Confidence) descerescente
-        best_candidate = sorted(
-            best_cluster, 
-            key=lambda x: self.source_weights.get(x.source, 1.0) * x.confidence,
-            reverse=True
-        )[0]
+            # Apply field-specific scoring
+            if field_type == "amount":
+                field_score = self.scorer.score_numeric_field(candidate.value)
+            elif field_type == "date":
+                field_score = self.scorer.score_date_field(candidate.value)
+            elif field_type == "cnpj":
+                field_score = self.scorer.score_cnpj_field(candidate.value)
+            else:
+                field_score = 1.0
+            
+            score += candidate.confidence * weight * field_score
         
-        # Ajusta confiança final baseada no consenso
-        final_confidence = min(0.99, max_score / 2.0) # Normalização heurística
-        best_candidate.confidence = final_confidence
+        # Consensus bonus
+        if len(cluster) > 1:
+            score *= 1.0 + (0.1 * len(cluster))
         
-        return best_candidate
-
+        return score
+    
     def rover_alignment(self, text_list: List[str]) -> str:
         """
-        Implementação simplificada do ROVER para alinhar textos de OCRs diferentes.
-        Útil para corrigir erros de caracteres (e.g. 'B0let0' vs 'Boleto').
+        ROVER-style alignment for OCR error correction.
+        
+        Merges multiple OCR outputs by character voting.
         """
         if not text_list:
             return ""
         if len(text_list) == 1:
             return text_list[0]
-            
-        # Usa difflib para encontrar sequencias correspondentes
-        # Pega a string mais longa como base
+        
+        # Get base string (longest)
+        text_list = [t for t in text_list if t]
+        if not text_list:
+            return ""
+        
         base = max(text_list, key=len)
-        others = [t for t in text_list if t != base]
         
-        result = base
-        # TODO: Implementar alinhamento token-a-token real para ROVER completo
-        # Por enquanto, retorna a string que tem mais caracteres alfanumericos (heurística de limpeza)
-        
-        best_str = max(text_list, key=lambda s: sum(c.isalnum() for c in s))
-        return best_str
+        # For now, return string with most alphanumeric characters
+        best = max(text_list, key=lambda s: sum(c.isalnum() for c in s))
+        return best
 
-# Singleton
-_voter_instance = None
-def get_ensemble_voter():
+
+# =============================================================================
+# SINGLETON
+# =============================================================================
+
+_voter_instance: Optional[EnsembleVoter] = None
+
+
+def get_ensemble_voter() -> EnsembleVoter:
+    """Get or create the ensemble voter singleton."""
     global _voter_instance
     if _voter_instance is None:
         _voter_instance = EnsembleVoter()

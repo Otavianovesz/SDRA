@@ -1,18 +1,38 @@
 """
-LazyModelManager - Memory-Optimized Model Loading
+LazyModelManager - Memory-Optimized Model Loading for 8GB RAM
+==============================================================
 
-Implements aggressive memory management for 8GB RAM constraint.
-Models are loaded on-demand and unloaded immediately after use.
+Implements aggressive memory management for CPU-only, 8GB RAM constraint.
+Models are loaded on-demand, quantized to int8, and unloaded immediately after use.
+
+Key principles:
+1. Load-Infer-Unload pattern - never hold models in memory
+2. Only ONE heavy model active at a time
+3. Dynamic int8 quantization for all PyTorch models
+4. Aggressive gc.collect() after every unload
+5. 6.5GB RAM hard limit with pre-flight checks
 """
 
 import gc
+import os
 import logging
 from typing import Optional, Any, Dict
 from contextlib import contextmanager
 
+import config
+from resource_manager import get_resource_manager
+
 logger = logging.getLogger(__name__)
 
-# Try to import psutil for memory monitoring
+# =============================================================================
+# ENVIRONMENT SETUP (must be before torch import)
+# =============================================================================
+for key, value in config.ENV_VARS.items():
+    os.environ.setdefault(key, value)
+
+# =============================================================================
+# OPTIONAL IMPORTS
+# =============================================================================
 try:
     import psutil
     PSUTIL_AVAILABLE = True
@@ -20,27 +40,78 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     logger.warning("psutil not available - memory monitoring disabled")
 
+try:
+    import torch
+    # Configure torch for CPU-only operation
+    torch.set_num_threads(config.CPU_THREADS)
+    torch.set_grad_enabled(False)  # Disable gradients globally
+    TORCH_AVAILABLE = True
+    logger.info(f"PyTorch configured: CPU-only, threads={torch.get_num_threads()}, grad=disabled")
+except ImportError:
+    TORCH_AVAILABLE = False
+    logger.warning("PyTorch not available")
+
 
 class LazyModelManager:
     """
-    Manages heavy AI models with strict memory discipline.
+    Manages heavy AI models with strict memory discipline for 8GB RAM.
     
     Key principles:
-    1. Load-Infer-Unload pattern for VLM
-    2. Only one heavy model active at a time
+    1. Load-Infer-Unload pattern for all models
+    2. Only ONE heavy model active at a time
     3. Aggressive gc.collect() after unload
-    4. 7.5GB RAM threshold enforced
+    4. 6.5GB RAM hard limit (leaving room for OS)
+    5. Dynamic int8 quantization on CPU
     """
     
-    def __init__(self, memory_limit_gb: float = 7.5):
+    # Model memory requirements (approximate)
+    MODEL_SIZES_GB = {
+        "gliner": 1.2,    # GLiNER NER
+        "florence2": 0.8, # Florence-2 base (float32)
+        "surya": 1.5,     # Surya OCR (Rec + Det)
+        "paddle": 0.6,    # PaddleOCR
+        "mcmf": 0.3       # MCMF Solver
+    }
+    
+    def __init__(self, memory_limit_gb: float = 6.5):
+        self.memory_limit_gb = memory_limit_gb
         self.memory_limit_bytes = memory_limit_gb * 1024 * 1024 * 1024
         self._active_models: Dict[str, Any] = {}
-        self._model_sizes = {
-            "gliner": 1.2,    # ~1.2GB RAM
-            "florence2": 0.5, # ~0.5GB RAM (0.23B params)
-            "surya": 1.5,     # ~1.5GB RAM (Rec + Det)
-            "mcmf": 0.5       # ~0.5GB RAM (Solver)
-        }
+        self._model_sizes = self.MODEL_SIZES_GB.copy()
+        
+        # Log initial state
+        self._log_memory("Manager initialized")
+    
+    def _log_memory(self, context: str = ""):
+        """Log current memory state."""
+        usage = self.get_memory_usage_gb()
+        available = self.get_available_memory_gb()
+        level = logging.WARNING if usage > (self.memory_limit_gb * 0.85) else logging.DEBUG
+        logger.log(level, f"Memory [{context}]: {usage:.2f}GB used, {available:.2f}GB available")
+    
+    def quantize_model(self, model: Any) -> Any:
+        """
+        Apply dynamic int8 quantization to PyTorch model for CPU.
+        Reduces memory by ~2-4x with minimal quality loss.
+        """
+        if not TORCH_AVAILABLE:
+            return model
+        
+        try:
+            # Only quantize torch modules
+            if not isinstance(model, torch.nn.Module):
+                return model
+            
+            quantized = torch.quantization.quantize_dynamic(
+                model,
+                {torch.nn.Linear},
+                dtype=torch.qint8
+            )
+            logger.info("Model quantized to int8 for CPU")
+            return quantized
+        except Exception as e:
+            logger.warning(f"Quantization failed: {e}")
+            return model
     
     def get_memory_usage_gb(self) -> float:
         """Get current RAM usage in GB."""
@@ -67,24 +138,9 @@ class LazyModelManager:
         Check if there's enough RAM for a new model.
         Returns True if safe to load, False if would exceed limit.
         """
-        if not PSUTIL_AVAILABLE:
-            return True  # Proceed without check
-        
-        mem = psutil.virtual_memory()
-        current_used = mem.used
-        would_use = current_used + (required_gb * 1024 ** 3)
-        
-        # Buffer de 500MB
-        limit = self.memory_limit_bytes - (0.5 * 1024 * 1024 * 1024)
-        
-        if would_use > limit:
-            logger.warning(
-                f"MEMORY WARNING: Would use {would_use/1e9:.2f}GB, "
-                f"safe limit is {limit/1e9:.2f}GB"
-            )
-            return False
-            
-        return True
+        # Delegate to central resource manager logic if possible, or keep consistent
+        manager = get_resource_manager()
+        return manager.check_memory_available(required_gb)
     
     def unload_all(self):
         """Aggressively unload all models and free memory."""
@@ -200,6 +256,42 @@ class LazyModelManager:
             logger.warning(f"Surya OCR disabled: {e}")
             return None
     
+    def load_paddle(self) -> Optional[Any]:
+        """Load PaddleOCR with CPU optimizations."""
+        if "paddle" in self._active_models:
+            return self._active_models["paddle"]
+        
+        # Don't unload all for paddle - it's lighter
+        if not self.check_memory(self._model_sizes.get("paddle", 0.6)):
+            logger.warning("Low memory for PaddleOCR")
+            self.unload_all()
+        
+        try:
+            logger.info("Loading PaddleOCR (CPU-optimized)...")
+            from paddleocr import PaddleOCR
+            
+            # CPU-optimized configuration
+            model = PaddleOCR(
+                use_angle_cls=config.PADDLE_CONFIG["use_angle_cls"],
+                lang=config.PADDLE_CONFIG["lang"],
+                use_gpu=config.PADDLE_CONFIG["use_gpu"],
+                enable_mkldnn=config.PADDLE_CONFIG["enable_mkldnn"],
+                cpu_threads=config.PADDLE_CONFIG["cpu_threads"],
+                show_log=False,
+                det_db_score_mode=config.PADDLE_CONFIG["det_db_score_mode"],
+                rec_batch_num=config.PADDLE_CONFIG["rec_batch_num"],
+                det_limit_side_len=config.PADDLE_CONFIG["det_limit_side_len"],
+                det_limit_type='max'
+            )
+            
+            self._active_models["paddle"] = model
+            self._log_memory("PaddleOCR loaded")
+            return model
+            
+        except Exception as e:
+            logger.warning(f"PaddleOCR disabled: {e}")
+            return None
+    
     @contextmanager
     def model_context(self, model_name: str):
         """
@@ -218,6 +310,8 @@ class LazyModelManager:
                 model = self.load_florence2()
             elif model_name == "surya":
                 model = self.load_surya()
+            elif model_name == "paddle":
+                model = self.load_paddle()
             elif model_name == "vlm":
                 pass # Deprecated generic VLM
             else:

@@ -20,6 +20,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
+import queue
 import tkinter as tk
 from tkinter import simpledialog
 
@@ -296,13 +297,48 @@ class SRDAApplication:
         
         # UI
         self._build_ui()
-        self._create_context_menu()
         self._setup_internal_drag_drop()
         self._setup_keyboard_shortcuts()  # QoL: Keyboard shortcuts
+        
+        # UI Queue for thread safety
+        self.gui_queue = queue.Queue()
+        self._process_queue()
         
         # Dados iniciais
         self._refresh_all()
     
+    def _process_queue(self):
+        """Processa eventos da UI enviados por threads (Step 49)."""
+        try:
+            while True:
+                # Tenta pegar evento sem bloquear
+                event = self.gui_queue.get_nowait()
+                
+                # event = (type, data)
+                etype, data = event
+                
+                if etype == "status":
+                    self._set_status(data)
+                elif etype == "tree_update":
+                    # data = (doc_id, status_text)
+                    self._update_tree_item_status(data[0], data[1])
+                elif etype == "refresh_all":
+                    self._refresh_all()
+                elif etype == "msg_box":
+                    # data = (title, message, type)
+                    title, msg, mtype = data
+                    if mtype == "info":
+                        Messagebox.showinfo(title, msg)
+                    elif mtype == "error":
+                        Messagebox.show_error(title, msg)
+                
+                self.gui_queue.task_done()
+        except queue.Empty:
+            pass
+        finally:
+            # Reagendar verificação
+            self.root.after(100, self._process_queue)
+
     def _center_window(self):
         self.root.update_idletasks()
         w = self.root.winfo_width()
@@ -319,7 +355,13 @@ class SRDAApplication:
         """Handler para arquivos dropados de fora da aplicacao."""
         try:
             files = self.root.tk.splitlist(event.data)
-            pdf_files = [f for f in files if f.lower().endswith('.pdf')]
+            
+            # Validação: Apenas PDFs (Step 52)
+            pdf_files = []
+            for f in files:
+                path = Path(f)
+                if path.is_file() and path.suffix.lower() == '.pdf':
+                    pdf_files.append(f)
             
             if pdf_files:
                 logger.info(f"Recebidos {len(pdf_files)} arquivos via drag-drop")
@@ -588,6 +630,153 @@ class SRDAApplication:
                 self.tree.item(item, values=new_values)
                 self.tree.see(item)  # Scroll to visible
                 break
+    
+    def _on_process_selected_click(self):
+        """Process selected documents with AI extraction (OCR + Ensemble)."""
+        selection = self.tree.selection()
+        if not selection:
+            # Process all pending documents
+            cursor = self.db.connection.cursor()
+            cursor.execute("SELECT id FROM documentos WHERE status = 'PENDING'")
+            rows = cursor.fetchall()
+            if not rows:
+                Messagebox.showinfo("Info", "Nenhum documento pendente para processar.", parent=self.root)
+                return
+            doc_ids = [row[0] for row in rows]
+            if len(doc_ids) > 20:
+                result = Messagebox.yesno(
+                    "Processar Todos", 
+                    f"Processar {len(doc_ids)} documentos pendentes com IA?\n\nIsso pode demorar.",
+                    parent=self.root
+                )
+                if result != "Yes":
+                    return
+        else:
+            doc_ids = []
+            for item in selection:
+                values = self.tree.item(item)['values']
+                if values:
+                    doc_ids.append(values[0])
+        
+        if not doc_ids:
+            return
+        
+        if self.is_processing:
+            return
+        
+        self._run_in_thread(self._do_process_documents, doc_ids)
+    
+    def _do_process_documents(self, doc_ids: List[int]):
+        """Process documents with AI extraction in background thread."""
+        import gc
+        
+        cursor = self.db.connection.cursor()
+        total = len(doc_ids)
+        processed = 0
+        errors = 0
+        
+        self.gui_queue.put(("status", f"🧠 Iniciando processamento de {total} documento(s)..."))
+        
+        for i, doc_id in enumerate(doc_ids):
+            # Update status
+            self.gui_queue.put(("status", f"🧠 [{i+1}/{total}] Processando documento..."))
+            self.gui_queue.put(("tree_update", (doc_id, "🔄 AI...")))
+            
+            try:
+                # Get document info
+                cursor.execute("""
+                    SELECT original_path, page_start, page_end, doc_type
+                    FROM documentos WHERE id = ?
+                """, (doc_id,))
+                row = cursor.fetchone()
+                
+                if not row:
+                    continue
+                
+                file_path = row[0] if isinstance(row, tuple) else row['original_path']
+                page_start = row[1] if isinstance(row, tuple) else row['page_start']
+                doc_type_str = row[3] if isinstance(row, tuple) else row['doc_type']
+                
+                if not file_path or not os.path.exists(file_path):
+                    errors += 1
+                    self.gui_queue.put(("tree_update", (doc_id, "❌ NoFile")))
+                    continue
+                
+                # Use hierarchical_extract from scanner (new method)
+                from pathlib import Path
+                try:
+                    doc_type = DocumentType[doc_type_str] if doc_type_str else DocumentType.UNKNOWN
+                except:
+                    doc_type = DocumentType.UNKNOWN
+                
+                result = self.scanner.hierarchical_extract(
+                    Path(file_path),
+                    page_num=(page_start or 1) - 1,
+                    doc_type=doc_type
+                )
+                
+                # Update database with extracted data
+                if result['amount_cents'] > 0 or result['due_date'] or result['cnpj']:
+                    # Update or insert transaction
+                    cursor.execute("""
+                        SELECT id FROM transacoes WHERE doc_id = ?
+                    """, (doc_id,))
+                    trans_row = cursor.fetchone()
+                    
+                    if trans_row:
+                        # Update existing transaction
+                        cursor.execute("""
+                            UPDATE transacoes SET
+                                amount_cents = COALESCE(NULLIF(?, 0), amount_cents),
+                                due_date = COALESCE(?, due_date),
+                                emission_date = COALESCE(?, emission_date)
+                            WHERE doc_id = ?
+                        """, (result['amount_cents'], result['due_date'], result['emission_date'], doc_id))
+                    else:
+                        # Insert new transaction
+                        cursor.execute("""
+                            INSERT INTO transacoes (doc_id, amount_cents, due_date, emission_date)
+                            VALUES (?, ?, ?, ?)
+                        """, (doc_id, result['amount_cents'], result['due_date'], result['emission_date']))
+                    
+                    # Update entity if found
+                    if result.get('entity_tag'):
+                        entity_val = result['entity_tag'].value if hasattr(result['entity_tag'], 'value') else str(result['entity_tag'])
+                        cursor.execute("""
+                            UPDATE documentos SET entity_tag = ? WHERE id = ?
+                        """, (entity_val, doc_id))
+                    
+                    # Update document status
+                    cursor.execute("""
+                        UPDATE documentos SET status = 'PARSED' WHERE id = ?
+                    """, (doc_id,))
+                    
+                    self.db.connection.commit()
+                    
+                    # Update tree with extracted data
+                    self.gui_queue.put(("tree_update", (doc_id, "✅ PARSED")))
+                    processed += 1
+                else:
+                    # No data extracted
+                    cursor.execute("""
+                        UPDATE documentos SET status = 'PARSED' WHERE id = ?
+                    """, (doc_id,))
+                    self.db.connection.commit()
+                    self.gui_queue.put(("tree_update", (doc_id, "⚠️ EMPTY")))
+                    processed += 1
+                
+                # Memory cleanup after each document
+                gc.collect()
+                
+            except Exception as e:
+                logger.error(f"Erro ao processar doc {doc_id}: {e}")
+                errors += 1
+                self.gui_queue.put(("tree_update", (doc_id, "❌ ERRO")))
+        
+        # Final status
+        msg = f"✅ Processado: {processed}/{total} | Erros: {errors}"
+        self.gui_queue.put(("status", msg))
+        self.gui_queue.put(("refresh_all", None))
     
     def _update_tree_item_full(self, doc_id: int, tipo: str = None, entity: str = None, 
                                 fornecedor: str = None, valor: str = None, status: str = None):
@@ -1111,6 +1300,10 @@ class SRDAApplication:
         columns = [col[0] for col in cursor.description]
         doc = dict(zip(columns, row))
         
+        # Reset pagination
+        self.current_preview_page = 0
+        self.total_pages = 1  # Will be updated by preview
+        
         container = ttk.Frame(self.details_frame)
         container.pack(fill=BOTH, expand=YES, padx=10, pady=10)
         
@@ -1193,30 +1386,75 @@ class SRDAApplication:
         
         # Preview
         path = doc.get('original_path', '')
+        
+        # Titulo Preview e Botoes
+        prev_header = ttk.Frame(container)
+        prev_header.pack(fill=X, pady=(15, 5))
+        ttk.Label(prev_header, text="Visualização", font=("Helvetica", 10, "bold"), bootstyle="secondary").pack(side=LEFT)
+        
+        # Pagination Controls
+        self.btn_prev_page = ttk.Button(prev_header, text="<", width=3, bootstyle="secondary-outline", command=lambda: self._change_page(-1))
+        self.btn_prev_page.pack(side=RIGHT, padx=(5, 0))
+        
+        self.lbl_page_info = ttk.Label(prev_header, text="1/1", font=("Consolas", 9))
+        self.lbl_page_info.pack(side=RIGHT, padx=(5, 5))
+        
+        self.btn_next_page = ttk.Button(prev_header, text=">", width=3, bootstyle="secondary-outline", command=lambda: self._change_page(1))
+        self.btn_next_page.pack(side=RIGHT)
+        
         if path and os.path.exists(path):
-            self._show_pdf_preview(path, (doc.get('page_start', 1) or 1) - 1)
+            self._show_pdf_preview(path)
         
         # Grafo
         self._show_document_graph(doc_id)
     
-    def _show_pdf_preview(self, pdf_path: str, page_num: int = 0):
+    def _change_page(self, delta: int):
+        """Muda a pagina do preview."""
+        if not self.selected_doc_id:
+            return
+            
+        new_page = self.current_preview_page + delta
+        if 0 <= new_page < self.total_pages:
+            self.current_preview_page = new_page
+            # Re-render preview
+            cursor = self.db.connection.cursor()
+            cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
+            row = cursor.fetchone()
+            if row and os.path.exists(row[0]):
+                self._show_pdf_preview(row[0])
+
+    def _show_pdf_preview(self, pdf_path: str):
         try:
             doc = fitz.open(pdf_path)
-            if len(doc) == 0:
+            self.total_pages = len(doc)
+            
+            if self.total_pages == 0:
                 doc.close()
                 return
             
-            page = doc[min(page_num, len(doc) - 1)]
+            # Ensure page in range
+            if self.current_preview_page >= self.total_pages:
+                self.current_preview_page = 0
+                
+            page = doc[self.current_preview_page]
             pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             
             img.thumbnail((400, 500), Image.Resampling.LANCZOS)
             self.preview_image = ImageTk.PhotoImage(img)
-            self.preview_label.configure(image=self.preview_image)
+            self.preview_label.configure(image=self.preview_image, text="")
+            
+            # Update info
+            self.lbl_page_info.configure(text=f"{self.current_preview_page + 1}/{self.total_pages}")
+            
+            # Update buttons state
+            self.btn_prev_page.configure(state=NORMAL if self.current_preview_page > 0 else DISABLED)
+            self.btn_next_page.configure(state=NORMAL if self.current_preview_page < self.total_pages - 1 else DISABLED)
             
             doc.close()
         except Exception as e:
             self.preview_label.configure(image='', text=f"Erro: {e}")
+            logger.error(f"Erro no preview: {e}")
     
     def _show_document_graph(self, doc_id: int):
         self.graph_text.delete(1.0, END)
@@ -1661,7 +1899,18 @@ class SRDAApplication:
     # ==========================================================================
     
     def run(self):
+        self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
         self.root.mainloop()
+    
+    def _on_closing(self):
+        """Manipula fechamento da janela."""
+        if self.is_processing:
+            if Messagebox.show_question("Sair?", "Processamento em andamento. Deseja forçar saída?", parent=self.root) != "Yes":
+                return
+        
+        self.cleanup()
+        self.root.destroy()
+        sys.exit(0)
     
     def cleanup(self):
         self.db.close()

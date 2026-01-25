@@ -1,0 +1,2322 @@
+{
+  "stats": {
+    "total": 100,
+    "success": 52,
+    "failed": 48,
+    "amount_correct": 52,
+    "date_correct": 48,
+    "entity_correct": 97,
+    "avg_time_ms": 279.9533772468567,
+    "by_path": {
+      "fast": 88,
+      "slow": 0,
+      "heavy": 12
+    },
+    "total_time_s": 27.99533772468567,
+    "amount_rate": 0.52,
+    "entity_rate": 0.97,
+    "date_rate": 0.48
+  },
+  "results": [
+    {
+      "file": "01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf",
+      "success": 3108.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "CADORE BIDOIA",
+        "amount": 3108.0,
+        "doc_type": "BOLETO",
+        "doc_number": null
+      },
+      "extracted": {
+        "amount": 3108.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-11-01",
+        "entity": "MV",
+        "cnpj": "26.552.687/0011-33",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 80.0480842590332,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf",
+      "success": 850.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "CADORE BIDOIA",
+        "amount": 850.0,
+        "doc_type": "NFE",
+        "doc_number": "732177"
+      },
+      "extracted": {
+        "amount": 850.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-15",
+        "entity": "MV",
+        "cnpj": "26.552.687/0011-33",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 93.09601783752441,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF",
+      "success": 270.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": 270.0,
+        "doc_type": "BOLETO",
+        "doc_number": "111534"
+      },
+      "extracted": {
+        "amount": 270.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "MV",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 63.47370147705078,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf",
+      "success": 270.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": 270.0,
+        "doc_type": "NFE",
+        "doc_number": "111534"
+      },
+      "extracted": {
+        "amount": 270.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "MV",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 82.1988582611084,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF",
+      "success": 81.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": 81.0,
+        "doc_type": "BOLETO",
+        "doc_number": "111535"
+      },
+      "extracted": {
+        "amount": 81.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "MV",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 66.3144588470459,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf",
+      "success": 81.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": 81.0,
+        "doc_type": "NFE",
+        "doc_number": "111535"
+      },
+      "extracted": {
+        "amount": 81.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "MV",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 83.43243598937988,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf",
+      "success": 370.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "ABDALLA TRUCK",
+        "amount": 370.0,
+        "doc_type": "BOLETO",
+        "doc_number": "20590"
+      },
+      "extracted": {
+        "amount": 370.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-11-01",
+        "entity": "VG",
+        "cnpj": "04.176.760/0001-05",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 75.88028907775879,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "ABDALLA TRUCK",
+        "amount": 370.0,
+        "doc_type": "NFSE",
+        "doc_number": "20590"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": null,
+        "emission_date": null,
+        "entity": null,
+        "cnpj": null,
+        "confidence": 0.0
+      },
+      "errors": [],
+      "time_ms": 2176.7616271972656,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AGRO BAGGIO",
+        "amount": 2843.29,
+        "doc_type": "NFE",
+        "doc_number": "414978"
+      },
+      "extracted": {
+        "amount": 4318.27,
+        "due_date": "2025-09-02",
+        "emission_date": "2025-09-02",
+        "entity": "VG",
+        "cnpj": "01.696.819/0005-21",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 122.894287109375,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AGRO BAGGIO",
+        "amount": 2843.29,
+        "doc_type": "BOLETO",
+        "doc_number": "414978"
+      },
+      "extracted": {
+        "amount": 0.1,
+        "due_date": "2025-11-03",
+        "emission_date": "2025-09-02",
+        "entity": "VG",
+        "cnpj": "01.696.819/0005-21",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 111.50240898132324,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_ARAGUAIA AGRICOLA_5.591,22_NFE_149522.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "ARAGUAIA AGRICOLA",
+        "amount": 5591.22,
+        "doc_type": "NFE",
+        "doc_number": "149522"
+      },
+      "extracted": {
+        "amount": 7346.0,
+        "due_date": "2025-10-03",
+        "emission_date": "2025-10-03",
+        "entity": "VG",
+        "cnpj": "73.643.959/0001-19",
+        "confidence": 0.95
+      },
+      "errors": [],
+      "time_ms": 116.19067192077637,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_ARAGUAIA AGRICOLA_612,99_1.838,98_PARC 2-3_NFE_109939.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "ARAGUAIA AGRICOLA",
+        "amount": 612.99,
+        "doc_type": "NFE",
+        "doc_number": "109939"
+      },
+      "extracted": {
+        "amount": 595.07,
+        "due_date": "2025-09-03",
+        "emission_date": "2025-09-03",
+        "entity": "VG",
+        "cnpj": "73.643.959/0004-61",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 145.02358436584473,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_1.364,40_NFE_111933.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 1694.4,
+        "doc_type": "NFE",
+        "doc_number": "111933"
+      },
+      "extracted": {
+        "amount": 1364.4,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 116.30463600158691,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_330,00_NFSE_46616.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 1694.4,
+        "doc_type": "NFSE",
+        "doc_number": "46616"
+      },
+      "extracted": {
+        "amount": 330.0,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 121.40464782714844,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_BOLETO_111933_46616.PDF",
+      "success": 1694.4,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 1694.4,
+        "doc_type": "BOLETO",
+        "doc_number": "46616"
+      },
+      "extracted": {
+        "amount": 1694.4,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 103.53755950927734,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_120,00_NFSE_46615.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 250.0,
+        "doc_type": "NFSE",
+        "doc_number": "46615"
+      },
+      "extracted": {
+        "amount": 120.0,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 123.58832359313965,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_130,00_NFE_111932.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 250.0,
+        "doc_type": "NFE",
+        "doc_number": "111932"
+      },
+      "extracted": {
+        "amount": 130.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 113.96598815917969,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_BOLETO_111932_46615.PDF",
+      "success": 250.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 250.0,
+        "doc_type": "BOLETO",
+        "doc_number": "46615"
+      },
+      "extracted": {
+        "amount": 250.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 103.49249839782715,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_3.455,00_2.555,00_PARC 3-3_NFE_109635.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 3455.0,
+        "doc_type": "NFE",
+        "doc_number": "109635"
+      },
+      "extracted": {
+        "amount": 7665.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-08-08",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 131.83331489562988,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_3.455,00_900,00_PARC 3-3_NFSE_45611.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "AUTO ELETRICA SANTA CLARA",
+        "amount": 3455.0,
+        "doc_type": "NFSE",
+        "doc_number": "45611"
+      },
+      "extracted": {
+        "amount": 48735.0,
+        "due_date": "2025-08-08",
+        "emission_date": "2025-08-08",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 123.19779396057129,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_1.142,00_BOLETO_961905_962065_957569_955833.pdf",
+      "success": 1142.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE BIDOIA",
+        "amount": 1142.0,
+        "doc_type": "BOLETO",
+        "doc_number": "955833"
+      },
+      "extracted": {
+        "amount": 1142.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-27",
+        "entity": "VG",
+        "cnpj": "26.552.687/0003-23",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 124.43017959594727,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_3.108,00_FATURA_FECHAMENTO.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE BIDOIA",
+        "amount": 3108.0,
+        "doc_type": "FATURA",
+        "doc_number": null
+      },
+      "extracted": {
+        "amount": 999.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-25",
+        "entity": null,
+        "cnpj": null,
+        "confidence": 0.7
+      },
+      "errors": [],
+      "time_ms": 108.25157165527344,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_40.688,00_BOLETO_FECHAMENTO.pdf",
+      "success": 40688.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE BIDOIA",
+        "amount": 40688.0,
+        "doc_type": "BOLETO",
+        "doc_number": null
+      },
+      "extracted": {
+        "amount": 40688.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-11-01",
+        "entity": "VG",
+        "cnpj": "26.552.687/0011-33",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 117.31362342834473,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_40.688,00_FATURA_FECHAMENTO.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE BIDOIA",
+        "amount": 40688.0,
+        "doc_type": "FATURA",
+        "doc_number": null
+      },
+      "extracted": {
+        "amount": 999.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-17",
+        "entity": "VG",
+        "cnpj": null,
+        "confidence": 0.7999999999999999
+      },
+      "errors": [],
+      "time_ms": 123.03590774536133,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_450,00_NFE_961905.pdf",
+      "success": 450.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE BIDOIA",
+        "amount": 450.0,
+        "doc_type": "NFE",
+        "doc_number": "961905"
+      },
+      "extracted": {
+        "amount": 450.0,
+        "due_date": "2025-12-01",
+        "emission_date": "2025-10-10",
+        "entity": "VG",
+        "cnpj": "26.552.687/0003-23",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 115.82159996032715,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CADORE, BIDOIA_52,00_NFE_729035.pdf",
+      "success": 52.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CADORE, BIDOIA",
+        "amount": 52.0,
+        "doc_type": "NFE",
+        "doc_number": "729035"
+      },
+      "extracted": {
+        "amount": 52.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-25",
+        "entity": "MV",
+        "cnpj": "26.552.687/0011-33",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 116.75024032592773,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_1.660,50_BOLETO_507.pdf",
+      "success": 1660.5,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 1660.5,
+        "doc_type": "BOLETO",
+        "doc_number": "507"
+      },
+      "extracted": {
+        "amount": 1660.5,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "12520000166050",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 111.95635795593262,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_1.660,50_NFSE_507.pdf",
+      "success": 1660.5,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 1660.5,
+        "doc_type": "NFSE",
+        "doc_number": "507"
+      },
+      "extracted": {
+        "amount": 1660.5,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "03.239.076/0001-62",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 139.52350616455078,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_4.126,24_BOLETO_505.pdf",
+      "success": 4126.24,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 4126.24,
+        "doc_type": "BOLETO",
+        "doc_number": "505"
+      },
+      "extracted": {
+        "amount": 4126.24,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "12520000412624",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 114.5639419555664,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_4.126,24_NFSE_505.pdf",
+      "success": 4126.24,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 4126.24,
+        "doc_type": "NFSE",
+        "doc_number": "505"
+      },
+      "extracted": {
+        "amount": 4126.24,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "03.239.076/0001-62",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 127.29167938232422,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_47,60_BOLETO_510.pdf",
+      "success": 47.6,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 47.6,
+        "doc_type": "BOLETO",
+        "doc_number": "510"
+      },
+      "extracted": {
+        "amount": 47.6,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "12520000004760",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 115.62705039978027,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_47,60_NFSE_510.pdf",
+      "success": 47.6,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 47.6,
+        "doc_type": "NFSE",
+        "doc_number": "510"
+      },
+      "extracted": {
+        "amount": 47.6,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "03.239.076/0001-62",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 136.92903518676758,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_531,00_BOLETO_509.pdf",
+      "success": 531.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 531.0,
+        "doc_type": "BOLETO",
+        "doc_number": "509"
+      },
+      "extracted": {
+        "amount": 531.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "12520000053100",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 116.19138717651367,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_531,00_NFSE_509.pdf",
+      "success": 531.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 531.0,
+        "doc_type": "NFSE",
+        "doc_number": "509"
+      },
+      "extracted": {
+        "amount": 531.0,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "03.239.076/0001-62",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 121.81353569030762,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_596,60_BOLETO_506.pdf",
+      "success": 596.6,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 596.6,
+        "doc_type": "BOLETO",
+        "doc_number": "506"
+      },
+      "extracted": {
+        "amount": 596.6,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "12520000059660",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 112.45918273925781,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CALDATTO SERVICOS_596,60_NFSE_506.pdf",
+      "success": 596.6,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CALDATTO SERVICOS",
+        "amount": 596.6,
+        "doc_type": "NFSE",
+        "doc_number": "506"
+      },
+      "extracted": {
+        "amount": 596.6,
+        "due_date": "2025-10-14",
+        "emission_date": "2025-10-14",
+        "entity": "VG",
+        "cnpj": "03.239.076/0001-62",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 125.48542022705078,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CASA DE CARNES CHAPECO_3.848,15_BOLETO_70789.pdf",
+      "success": 3848.15,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CASA DE CARNES CHAPECO",
+        "amount": 3848.15,
+        "doc_type": "BOLETO",
+        "doc_number": "70789"
+      },
+      "extracted": {
+        "amount": 3848.15,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-11-01",
+        "entity": "VG",
+        "cnpj": "07.980.187/0001-86",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 103.46007347106934,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CASA DE CARNES CHAPECO_3.848,15_NFE_70789.PDF",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CASA DE CARNES CHAPECO",
+        "amount": 3848.15,
+        "doc_type": "NFE",
+        "doc_number": "70789"
+      },
+      "extracted": {
+        "amount": 461.88,
+        "due_date": "2025-10-02",
+        "emission_date": "2025-10-02",
+        "entity": "VG",
+        "cnpj": "07980187000186",
+        "confidence": 0.9499999999999998
+      },
+      "errors": [],
+      "time_ms": 131.23536109924316,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CASE MAQUINAS_3.060,00_BOLETO_4650.pdf",
+      "success": 3060.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CASE MAQUINAS",
+        "amount": 3060.0,
+        "doc_type": "BOLETO",
+        "doc_number": "4650"
+      },
+      "extracted": {
+        "amount": 3060.0,
+        "due_date": "2025-11-01",
+        "emission_date": null,
+        "entity": "VG",
+        "cnpj": "15.671.525/0004-79",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 111.85789108276367,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_CASE MAQUINAS_3.060,00_NFE_4650.pdf",
+      "success": 3060.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "CASE MAQUINAS",
+        "amount": 3060.0,
+        "doc_type": "NFE",
+        "doc_number": "4650"
+      },
+      "extracted": {
+        "amount": 3060.0,
+        "due_date": "2025-10-02",
+        "emission_date": "2025-11-01",
+        "entity": "VG",
+        "cnpj": "15.671.525/0004-79",
+        "confidence": 0.9
+      },
+      "errors": [],
+      "time_ms": 138.77201080322266,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_ENERGISA MATO GROSSO_2.171,02_FATURA_650946672.pdf",
+      "success": 2171.02,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "ENERGISA MATO GROSSO",
+        "amount": 2171.02,
+        "doc_type": "FATURA",
+        "doc_number": "650946672"
+      },
+      "extracted": {
+        "amount": 2171.02,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-11-12",
+        "entity": "VG",
+        "cnpj": "03.467.321/0001-99",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 142.30632781982422,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_GF AUTO CENTER_3.062,20_742,20_PARC 1-2_NFE_712.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "GF AUTO CENTER",
+        "amount": 3062.2,
+        "doc_type": "NFE",
+        "doc_number": "712"
+      },
+      "extracted": {
+        "amount": 10.0,
+        "due_date": "2025-10-13",
+        "emission_date": "2025-10-13",
+        "entity": "VG",
+        "cnpj": "49.260.103/0001-80",
+        "confidence": 0.9499999999999998
+      },
+      "errors": [],
+      "time_ms": 121.2465763092041,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_GF AUTO CENTER_4.231,00_2.215,00_NFE_711.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "GF AUTO CENTER",
+        "amount": 4231.0,
+        "doc_type": "NFE",
+        "doc_number": "711"
+      },
+      "extracted": {
+        "amount": 1080.0,
+        "due_date": "2025-10-13",
+        "emission_date": "2025-10-13",
+        "entity": "VG",
+        "cnpj": "49.260.103/0001-80",
+        "confidence": 0.9499999999999998
+      },
+      "errors": [],
+      "time_ms": 118.52288246154785,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_1.439,00_1.434,00_NFSE_3161.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 1439.0,
+        "doc_type": "NFSE",
+        "doc_number": "3161"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 2109.7662448883057,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_1.439,00_5,00_NFE_3672.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 1439.0,
+        "doc_type": "NFE",
+        "doc_number": "3672"
+      },
+      "extracted": {
+        "amount": 5.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 167.3574447631836,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_1.439,00_BOLETO_3672_3161.pdf",
+      "success": 1439.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 1439.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3161"
+      },
+      "extracted": {
+        "amount": 1439.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000143900",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 147.1719741821289,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_1.772,88_PARC 1-2_BOLETO_3673.pdf",
+      "success": 1772.88,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 1772.88,
+        "doc_type": "BOLETO",
+        "doc_number": "3673"
+      },
+      "extracted": {
+        "amount": 1772.88,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000177288",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 152.06480026245117,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_2.573,00_2.287,00_NFSE_3159.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 2573.0,
+        "doc_type": "NFSE",
+        "doc_number": "3159"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1033.3218574523926,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_2.573,00_286,00_NFE_3674.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 2573.0,
+        "doc_type": "NFE",
+        "doc_number": "3674"
+      },
+      "extracted": {
+        "amount": 76.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 159.8365306854248,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_2.573,00_BOLETO_3674_3159.pdf",
+      "success": 2573.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 2573.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3159"
+      },
+      "extracted": {
+        "amount": 2573.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000257300",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 148.25057983398438,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.078,00_PARC 1-2_NFSE_3160.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3078.0,
+        "doc_type": "NFSE",
+        "doc_number": "3160"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1043.421983718872,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.228,53_1.605,00_PARC 1-2_NFSE_3165.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3228.53,
+        "doc_type": "NFSE",
+        "doc_number": "3165"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1022.8941440582275,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.228,53_1.623,53_PARC 1-2_NFE_3669.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3228.53,
+        "doc_type": "NFE",
+        "doc_number": "3669"
+      },
+      "extracted": {
+        "amount": 5.0,
+        "due_date": "2025-10-26",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 162.10603713989258,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.228,53_PARC 1-2_BOLETO_3669_3165.pdf",
+      "success": 3228.53,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3228.53,
+        "doc_type": "BOLETO",
+        "doc_number": "3165"
+      },
+      "extracted": {
+        "amount": 3228.53,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000322853",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 162.10460662841797,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.323,40_1.558,00_NFE_3670.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3323.4,
+        "doc_type": "NFE",
+        "doc_number": "3670"
+      },
+      "extracted": {
+        "amount": 169.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 167.99640655517578,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.323,40_1.765,40_NFSE_3163.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3323.4,
+        "doc_type": "NFSE",
+        "doc_number": "3163"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1036.1213684082031,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.323,40_BOLETO_3670_3163.pdf",
+      "success": 3323.4,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3323.4,
+        "doc_type": "BOLETO",
+        "doc_number": "3163"
+      },
+      "extracted": {
+        "amount": 3323.4,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000332340",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 168.24626922607422,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.389,60_2.584,60_NFSE_3156.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3389.6,
+        "doc_type": "NFSE",
+        "doc_number": "3156"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1056.5276145935059,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.389,60_805,00_NFE_3676.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3389.6,
+        "doc_type": "NFE",
+        "doc_number": "3676"
+      },
+      "extracted": {
+        "amount": 80.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 165.1616096496582,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.389,60_BOLETO_3676_3156.pdf",
+      "success": 3389.6,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3389.6,
+        "doc_type": "BOLETO",
+        "doc_number": "3156"
+      },
+      "extracted": {
+        "amount": 3389.6,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000338960",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 150.7108211517334,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_3.467,76_PARC 1-2_NFE_3673.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 3467.76,
+        "doc_type": "NFE",
+        "doc_number": "3673"
+      },
+      "extracted": {
+        "amount": 42.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 163.4824275970459,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.292,00_1.367,00_NFE_3664.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4292.0,
+        "doc_type": "NFE",
+        "doc_number": "3664"
+      },
+      "extracted": {
+        "amount": 10.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 165.15851020812988,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.292,00_2.925,0_NFSE_3167.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4292.0,
+        "doc_type": "NFSE",
+        "doc_number": "3167"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1035.2351665496826,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.292,00_BOLETO_3664_3167.pdf",
+      "success": 4292.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4292.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3167"
+      },
+      "extracted": {
+        "amount": 4292.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000429200",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 155.49039840698242,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.597,93_1.171,26_PARC 1-3_NFE_3667.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4597.93,
+        "doc_type": "NFE",
+        "doc_number": "3667"
+      },
+      "extracted": {
+        "amount": 105.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 176.56302452087402,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.597,93_3.426,67_PARC 1-3_NFSE_3166.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4597.93,
+        "doc_type": "NFSE",
+        "doc_number": "3166"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1040.177822113037,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.597,93_PARC 1-3_BOLETO_3667_3166.pdf",
+      "success": 4597.93,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4597.93,
+        "doc_type": "BOLETO",
+        "doc_number": "3166"
+      },
+      "extracted": {
+        "amount": 4597.93,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000459793",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 154.44159507751465,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.683,40_1.140,40_NFSE_3162.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4683.4,
+        "doc_type": "NFSE",
+        "doc_number": "3162"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1035.86745262146,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.683,40_3.543,00_NFE_3671.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4683.4,
+        "doc_type": "NFE",
+        "doc_number": "3671"
+      },
+      "extracted": {
+        "amount": 29.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 162.13345527648926,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_4.683,40_BOLETO_3671_3162.pdf",
+      "success": 4683.39,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4683.4,
+        "doc_type": "BOLETO",
+        "doc_number": "3162"
+      },
+      "extracted": {
+        "amount": 4683.39,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000468340",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 154.6921730041504,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_455,00_215,00_NFE_3668.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 455.0,
+        "doc_type": "NFE",
+        "doc_number": "3668"
+      },
+      "extracted": {
+        "amount": 85.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 166.2285327911377,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_455,00_240,00_NFSE_3164.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 455.0,
+        "doc_type": "NFSE",
+        "doc_number": "3164"
+      },
+      "extracted": {
+        "amount": 240.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 159.68966484069824,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_455,00_BOLETO_3668_3164.pdf",
+      "success": 455.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 455.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3164"
+      },
+      "extracted": {
+        "amount": 455.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000045500",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 151.4747142791748,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_476,00_166,00_NFE_3675.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 476.0,
+        "doc_type": "NFE",
+        "doc_number": "3675"
+      },
+      "extracted": {
+        "amount": 76.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 170.51959037780762,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_476,00_310,00_NFSE_3158.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 476.0,
+        "doc_type": "NFSE",
+        "doc_number": "3158"
+      },
+      "extracted": {
+        "amount": 310.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 157.15527534484863,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_476,00_BOLETO_3675_3158.pdf",
+      "success": 476.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 476.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3158"
+      },
+      "extracted": {
+        "amount": 476.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000047600",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 148.62346649169922,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_780,00_BOLETO_3157.pdf",
+      "success": 780.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 780.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3157"
+      },
+      "extracted": {
+        "amount": 780.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-01",
+        "entity": "VG",
+        "cnpj": "12520000078000",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 162.56213188171387,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELIA GONCALVES_780,00_NFSE_3157.pdf",
+      "success": 780.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 780.0,
+        "doc_type": "NFSE",
+        "doc_number": "3157"
+      },
+      "extracted": {
+        "amount": 780.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 161.24701499938965,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_JUCELUA GONCALVES_3.000,00_BOLETO_3673_3160.pdf",
+      "success": 3000.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "JUCELUA GONCALVES",
+        "amount": 3000.0,
+        "doc_type": "BOLETO",
+        "doc_number": "3160"
+      },
+      "extracted": {
+        "amount": 3000.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-09",
+        "entity": "VG",
+        "cnpj": "12520000300000",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 157.88030624389648,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_M. P. S. ALCANTARA_2.598,50_5.197,00_PARC 2-2_BOLETO_4046.pdf",
+      "success": 2598.5,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "M. P. S. ALCANTARA",
+        "amount": 2598.5,
+        "doc_type": "BOLETO",
+        "doc_number": "4046"
+      },
+      "extracted": {
+        "amount": 2598.5,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-06",
+        "entity": "VG",
+        "cnpj": "12520000259850",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 180.72819709777832,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_M. P. S. ALCANTARA_2.598,50_5.197,00_PARC 2-2_NFSE_4046.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "M. P. S. ALCANTARA",
+        "amount": 2598.5,
+        "doc_type": "NFSE",
+        "doc_number": "4046"
+      },
+      "extracted": {
+        "amount": 93806.0,
+        "due_date": "2025-09-06",
+        "emission_date": "2025-09-06",
+        "entity": "VG",
+        "cnpj": "43.462.432/0001-27",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 169.78216171264648,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_MUTUM DIESEL_7.802,70_31.210,85_PARC 2-4_BOLETO_293.pdf",
+      "success": 7802.7,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "MUTUM DIESEL",
+        "amount": 7802.7,
+        "doc_type": "BOLETO",
+        "doc_number": "293"
+      },
+      "extracted": {
+        "amount": 7802.7,
+        "due_date": "2025-12-01",
+        "emission_date": null,
+        "entity": "VG",
+        "cnpj": "12820000780270",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 151.87692642211914,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_MUTUM DIESEL_7.802,70_31.210,85_PARC 2-4_NFSE_293.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "MUTUM DIESEL",
+        "amount": 7802.7,
+        "doc_type": "NFSE",
+        "doc_number": "293"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": "2025-09-01",
+        "emission_date": "2025-09-01",
+        "entity": "VG",
+        "cnpj": "24.772.162/0001-06",
+        "confidence": 0.65
+      },
+      "errors": [],
+      "time_ms": 1041.609287261963,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.11.2025_VG_NOVO HORIZONTE_340,34_BOLETO_263.pdf",
+      "success": 340.34,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "NOVO HORIZONTE",
+        "amount": 340.34,
+        "doc_type": "BOLETO",
+        "doc_number": "263"
+      },
+      "extracted": {
+        "amount": 340.34,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-16",
+        "entity": "VG",
+        "cnpj": "00.506.858/0001-22",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 176.8643856048584,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_NOVO HORIZONTE_340,34_FATURA_263.pdf",
+      "success": 340.34,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "NOVO HORIZONTE",
+        "amount": 340.34,
+        "doc_type": "FATURA",
+        "doc_number": "263"
+      },
+      "extracted": {
+        "amount": 340.34,
+        "due_date": "2025-09-18",
+        "emission_date": "2025-09-18",
+        "entity": "VG",
+        "cnpj": "00506858000122",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 132.826566696167,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_NOVO HORIZONTE_397,91_NFE_3954811.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "NOVO HORIZONTE",
+        "amount": 397.91,
+        "doc_type": "NFE",
+        "doc_number": "3954811"
+      },
+      "extracted": {
+        "amount": 69.2,
+        "due_date": "2025-10-30",
+        "emission_date": "2025-10-30",
+        "entity": "VG",
+        "cnpj": "00.506.858/0001-22",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 165.60888290405273,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_O MONTAGNA E CIA_1.574,86_3.149,71_PARC 2-2_NFE_152714.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "O MONTAGNA E CIA",
+        "amount": 1574.86,
+        "doc_type": "NFE",
+        "doc_number": "152714"
+      },
+      "extracted": {
+        "amount": 691.38,
+        "due_date": "2025-10-01",
+        "emission_date": "2025-09-05",
+        "entity": "VG",
+        "cnpj": "24.969.636/0004-57",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 178.00068855285645,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_O MONTAGNA E CIA_1.574,86_PARC 2-2_BOLETO_152714.pdf",
+      "success": 1574.85,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "O MONTAGNA E CIA",
+        "amount": 1574.86,
+        "doc_type": "BOLETO",
+        "doc_number": "152714"
+      },
+      "extracted": {
+        "amount": 1574.85,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-05",
+        "entity": "VG",
+        "cnpj": "12520000157485",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 165.2517318725586,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_PARANA MAT_1.136,78_BOLETO_136052.pdf",
+      "success": 1136.78,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "PARANA MAT",
+        "amount": 1136.78,
+        "doc_type": "BOLETO",
+        "doc_number": "136052"
+      },
+      "extracted": {
+        "amount": 1136.78,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "VG",
+        "cnpj": "01.426.949/0008-97",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 155.61938285827637,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_PARANA MAT_1.136,78_NFE_136052.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "PARANA MAT",
+        "amount": 1136.78,
+        "doc_type": "NFE",
+        "doc_number": "136052"
+      },
+      "extracted": {
+        "amount": 38.0,
+        "due_date": "2025-10-02",
+        "emission_date": "2025-10-02",
+        "entity": "VG",
+        "cnpj": "01.426.949/0007-06",
+        "confidence": 0.9499999999999998
+      },
+      "errors": [],
+      "time_ms": 171.67973518371582,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_SANTA CLARA_100,00_BOLETO_111533.PDF",
+      "success": 100.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "SANTA CLARA",
+        "amount": 100.0,
+        "doc_type": "BOLETO",
+        "doc_number": "111533"
+      },
+      "extracted": {
+        "amount": 100.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 146.20113372802734,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_SANTA CLARA_100,00_NFE_11533.pdf",
+      "success": 100.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "SANTA CLARA",
+        "amount": 100.0,
+        "doc_type": "NFE",
+        "doc_number": "11533"
+      },
+      "extracted": {
+        "amount": 100.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-10-02",
+        "entity": "VG",
+        "cnpj": "01.985.928/0001-35",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 166.7196750640869,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_SOLUÇÕES FREIOS_3.371,67_10.115,00_PARC 2-3_BOLETO_6380.pdf",
+      "success": 3371.67,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "SOLUÇÕES FREIOS",
+        "amount": 3371.67,
+        "doc_type": "BOLETO",
+        "doc_number": "6380"
+      },
+      "extracted": {
+        "amount": 3371.67,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-09-06",
+        "entity": "VG",
+        "cnpj": "35.272.832/0001-41",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 162.0473861694336,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_SOLUÇÕES FREIOS_3.371,67_10.115,00_PARC 2-3_NFE_6380.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "SOLUÇÕES FREIOS",
+        "amount": 3371.67,
+        "doc_type": "NFE",
+        "doc_number": "6380"
+      },
+      "extracted": {
+        "amount": 10115.0,
+        "due_date": "2025-11-29",
+        "emission_date": "2025-09-06",
+        "entity": "VG",
+        "cnpj": "35.272.832/0001-41",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 174.23772811889648,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_TELEMACO ANTONIO_4.000,00_PARC 8-12_BOLETO_2025.pdf",
+      "success": 4000.0,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "TELEMACO ANTONIO",
+        "amount": 4000.0,
+        "doc_type": "BOLETO",
+        "doc_number": "2025"
+      },
+      "extracted": {
+        "amount": 4000.0,
+        "due_date": "2025-11-01",
+        "emission_date": "2025-02-28",
+        "entity": "VG",
+        "cnpj": "12520000400000",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 158.2658290863037,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.11.2025_VG_WORLD FOODS_10.571,42_PARC 37-42_CONTRATO_322813708.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-01",
+        "entity": "VG",
+        "supplier": "WORLD FOODS",
+        "amount": 10571.42,
+        "doc_type": "CONTRATO",
+        "doc_number": "322813708"
+      },
+      "extracted": {
+        "amount": null,
+        "due_date": null,
+        "emission_date": null,
+        "entity": "VG",
+        "cnpj": "04.534.200/0001-85",
+        "confidence": 0.35
+      },
+      "errors": [],
+      "time_ms": 1060.0314140319824,
+      "extraction_path": "heavy"
+    },
+    {
+      "file": "01.12.2025_VG_ASTAM_790,00_BOLETO_88107.pdf",
+      "success": 790.0,
+      "ground_truth": {
+        "date": "2025-12-01",
+        "entity": "VG",
+        "supplier": "ASTAM",
+        "amount": 790.0,
+        "doc_type": "BOLETO",
+        "doc_number": "88107"
+      },
+      "extracted": {
+        "amount": 790.0,
+        "due_date": "2025-12-01",
+        "emission_date": "2025-10-30",
+        "entity": "VG",
+        "cnpj": "12820000079000",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 152.29558944702148,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.12.2025_VG_ASTAM_790,00_NFE_88107.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-12-01",
+        "entity": "VG",
+        "supplier": "ASTAM",
+        "amount": 790.0,
+        "doc_type": "NFE",
+        "doc_number": "88107"
+      },
+      "extracted": {
+        "amount": 1.0,
+        "due_date": "2025-12-01",
+        "emission_date": "2025-10-30",
+        "entity": "VG",
+        "cnpj": "02.566.965/0001-71",
+        "confidence": 1.0
+      },
+      "errors": [],
+      "time_ms": 166.50700569152832,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "01.12.2025_VG_JUCELIA GONCALVES_4.597,93_1.171,26_PARC 2-3_NFE_3667.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-12-01",
+        "entity": "VG",
+        "supplier": "JUCELIA GONCALVES",
+        "amount": 4597.93,
+        "doc_type": "NFE",
+        "doc_number": "3667"
+      },
+      "extracted": {
+        "amount": 105.0,
+        "due_date": "2025-09-30",
+        "emission_date": "2025-09-30",
+        "entity": "VG",
+        "cnpj": "32.470.045/0001-16",
+        "confidence": 0.9999999999999999
+      },
+      "errors": [],
+      "time_ms": 180.82165718078613,
+      "extraction_path": "fast"
+    },
+    {
+      "file": "02.11.2025_VG_AGRO BAGGIO_3.422,90_6.845,99_PARC 2-2_NFE_415084.pdf",
+      "success": false,
+      "ground_truth": {
+        "date": "2025-11-02",
+        "entity": "VG",
+        "supplier": "AGRO BAGGIO",
+        "amount": 3422.9,
+        "doc_type": "NFE",
+        "doc_number": "415084"
+      },
+      "extracted": {
+        "amount": 8557.51,
+        "due_date": "2025-09-03",
+        "emission_date": "2025-09-03",
+        "entity": "VG",
+        "cnpj": "01.696.819/0005-21",
+        "confidence": 0.95
+      },
+      "errors": [],
+      "time_ms": 174.4251251220703,
+      "extraction_path": "fast"
+    }
+  ]
+}

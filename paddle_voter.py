@@ -1,14 +1,15 @@
 """
-SDRA-Rural PaddleOCR Voter
-===========================
-Implementação do OCR de Alta Precisão (Fase 2)
+SDRA-Rural PaddleOCR Voter - Optimized for 8GB RAM, CPU-only
+=============================================================
 
-Substitui o Tesseract pelo PaddleOCR (PP-OCRv4) para:
-- Melhor suporte a layouts complexos
-- Reconhecimento robusto de textos distorcidos
-- Detecção de texto orientado (rotacionado)
-
-Integração com LazyModelManager para gestão de memória (8GB RAM).
+Optimizations applied:
+1. MKLDNN enabled for Intel CPU acceleration
+2. use_gpu=False explicitly set
+3. limit_side_len=960 (A4 sufficient, saves RAM)
+4. cpu_threads=4
+5. Confidence filter at 0.6 (was 0.5)
+6. Skip BGR conversion for grayscale (saves memory)
+7. Added bbox merge for broken text lines
 """
 
 import logging
@@ -17,87 +18,138 @@ import cv2
 from typing import Optional, List, Dict, Any, Union
 from PIL import Image
 
-from lazy_model_manager import get_model_manager
-try:
-    from preprocessing import ImagePreprocessor
-except ImportError:
-    ImagePreprocessor = None
+import config
+from resource_manager import get_resource_manager
 
 logger = logging.getLogger(__name__)
+
+# Confidence threshold for filtering noise
+MIN_CONFIDENCE = 0.6
+
+# Y-axis proximity threshold for merging lines (pixels)
+LINE_MERGE_THRESHOLD = 15
 
 
 class PaddleOCRVoter:
     """
-    Voter baseado no PaddleOCR (PP-OCRv4).
+    Voter based on PaddleOCR (PP-OCRv4).
     
-    Características:
-    - Multilíngue (foco em PT-BR)
-    - Ângulo de classificação ativo
-    - Otimizado para CPU (MKLDNN) via LazyModelManager
+    Optimized for 8GB RAM CPU-only operation:
+    - MKLDNN acceleration for Intel CPUs
+    - Memory-efficient configuration
+    - Confidence-based filtering
+    - Line merging for broken text
     """
     
     def __init__(self):
-        self.manager = get_model_manager()
-        self.preprocessor = ImagePreprocessor() if ImagePreprocessor else None
+        self._model = None
+        self._loaded = False
         
     def _get_model(self):
-        """Obtém instância do PaddleOCR via gerenciador de memória."""
-        return self.manager.load_paddle()
+        """Get or create PaddleOCR instance with CPU optimizations."""
+        if self._model is not None:
+            return self._model
+        
+        try:
+            from paddleocr import PaddleOCR
+            
+            logger.info("Loading PaddleOCR (CPU-optimized)...")
+            
+            # CPU-optimized configuration
+            self._model = PaddleOCR(
+                use_angle_cls=config.PADDLE_CONFIG["use_angle_cls"],
+                lang=config.PADDLE_CONFIG["lang"],
+                use_gpu=config.PADDLE_CONFIG["use_gpu"],
+                enable_mkldnn=config.PADDLE_CONFIG["enable_mkldnn"],
+                cpu_threads=config.PADDLE_CONFIG["cpu_threads"],
+                show_log=False,
+                det_db_score_mode=config.PADDLE_CONFIG["det_db_score_mode"],
+                rec_batch_num=config.PADDLE_CONFIG["rec_batch_num"],
+                det_limit_side_len=config.PADDLE_CONFIG["det_limit_side_len"],
+                det_limit_type='max'
+            )
+            
+            self._loaded = True
+            logger.info("PaddleOCR loaded (CPU, MKLDNN enabled)")
+            return self._model
+            
+        except ImportError:
+            logger.warning("PaddleOCR not installed")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to load PaddleOCR: {e}")
+            return None
+    
+    def unload_model(self):
+        """Free memory."""
+        if self._model:
+            del self._model
+            self._model = None
+            self._loaded = False
+            self._loaded = False
+            get_resource_manager().force_cleanup()
+            logger.info("PaddleOCR unloaded")
+    
+    def is_available(self) -> bool:
+        """Check if PaddleOCR is available."""
+        return self._loaded or self._get_model() is not None
         
     def extract_text(self, image: Union[str, np.ndarray, Image.Image]) -> str:
         """
-        Extrai texto puro de uma imagem.
+        Extract plain text from an image.
         
         Args:
-            image: Caminho, array numpy (BGR) ou PIL Image
+            image: File path, numpy array (BGR), or PIL Image
             
         Returns:
-            Texto concatenado
+            Concatenated text
         """
         try:
             model = self._get_model()
             if not model:
                 return ""
             
-            # Converter entrada para numpy BGR
+            # Convert to numpy BGR
             img_array = self._prepare_image(image)
+            if img_array is None:
+                return ""
             
-            # Pré-processamento (Restoration Phase 1)
-            # PaddleOCR já tem preprocessamento interno, mas o nosso
-            # é focado em restauração de degradação (CLAHE/Denoise)
-            if self.preprocessor:
-                # Usa preprocessamento leve para OCR (mantém cores/cinza)
-                img_array = self.preprocessor.preprocess_for_ocr(img_array)
-            
-            # Inferência
-            # cls=True habilita classificador de ângulo (importante para boletos tortos)
+            # Run OCR with angle classification
             result = model.ocr(img_array, cls=True)
             
             if not result or result[0] is None:
                 return ""
             
-            # Paddle retorna lista de linhas: [ [[points], (text, conf)], ... ]
-            # extrair apenas o texto
+            # Extract text with confidence filtering
             lines = []
             for line in result[0]:
                 text_content = line[1][0]
                 confidence = line[1][1]
                 
-                # Filtra lixo de baixa confiança
-                if confidence > 0.5:
+                # FIX: Stricter confidence filter (was 0.5)
+                if confidence >= MIN_CONFIDENCE:
                     lines.append(text_content)
             
             return "\n".join(lines)
             
         except Exception as e:
-            logger.error(f"Erro no PaddleOCR: {e}")
+            logger.error(f"PaddleOCR error: {e}")
             return ""
 
-    def extract_structured(self, image: Union[str, np.ndarray]) -> List[Dict[str, Any]]:
+    def extract_structured(
+        self, 
+        image: Union[str, np.ndarray, Image.Image],
+        merge_lines: bool = True
+    ) -> List[Dict[str, Any]]:
         """
-        Extrai dados estruturados (texto + bbox + conf).
+        Extract structured data (text + bbox + confidence).
         
-        Útil para arquitetura Localizar-Recortar-Reconhecer.
+        Args:
+            image: Input image
+            merge_lines: Whether to merge broken text lines
+            
+        Returns:
+            List of dicts with text, confidence, and bbox
         """
         try:
             model = self._get_model()
@@ -105,9 +157,9 @@ class PaddleOCRVoter:
                 return []
             
             img_array = self._prepare_image(image)
-            if self.preprocessor:
-                img_array = self.preprocessor.preprocess_for_ocr(img_array)
-                
+            if img_array is None:
+                return []
+            
             result = model.ocr(img_array, cls=True)
             
             output = []
@@ -116,60 +168,182 @@ class PaddleOCRVoter:
                     points = line[0]
                     text = line[1][0]
                     conf = line[1][1]
+                    
+                    # FIX: Filter low confidence
+                    if conf < MIN_CONFIDENCE:
+                        continue
+                    
+                    # Calculate center Y for line merging
+                    y_center = (points[0][1] + points[2][1]) / 2
+                    
                     output.append({
                         "text": text,
                         "confidence": conf,
-                        "bbox": points  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                        "bbox": points,  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                        "_y_center": y_center
                     })
+            
+            # FIX: Merge broken lines
+            if merge_lines and len(output) > 1:
+                output = self._merge_broken_lines(output)
+            
+            # Remove internal field
+            for item in output:
+                item.pop("_y_center", None)
+            
             return output
             
         except Exception as e:
-            logger.error(f"Erro estruturado PaddleOCR: {e}")
+            logger.error(f"PaddleOCR structured error: {e}")
             return []
 
-    def _prepare_image(self, image: Union[str, np.ndarray, Image.Image]) -> np.ndarray:
-        """Converte entrada para numpy array BGR compatível com CV2/Paddle."""
-        if isinstance(image, str):
-            # Caminho arquivo
-            return cv2.imread(image)
+    def _merge_broken_lines(self, items: List[Dict]) -> List[Dict]:
+        """
+        Merge text boxes that are on the same line (Y-axis proximity).
         
-        if isinstance(image, Image.Image):
-            # PIL -> Numpy -> BGR
-            img_np = np.array(image)
-            if len(img_np.shape) == 3 and img_np.shape[2] == 3:
-                return cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            elif len(img_np.shape) == 2: # Grayscale
-                return cv2.cvtColor(img_np, cv2.COLOR_GRAY2BGR)
-            elif len(img_np.shape) == 3 and img_np.shape[2] == 4: # RGBA
-                return cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
-            return img_np
+        Fixes: Text that spans multiple columns or is broken by OCR.
+        """
+        if not items:
+            return items
+        
+        # Sort by Y-center, then X
+        sorted_items = sorted(
+            items, 
+            key=lambda x: (x["_y_center"], x["bbox"][0][0])
+        )
+        
+        merged = []
+        current_line = [sorted_items[0]]
+        current_y = sorted_items[0]["_y_center"]
+        
+        for item in sorted_items[1:]:
+            if abs(item["_y_center"] - current_y) <= LINE_MERGE_THRESHOLD:
+                # Same line, add to current
+                current_line.append(item)
+            else:
+                # New line, merge current and start new
+                merged.append(self._merge_line_items(current_line))
+                current_line = [item]
+                current_y = item["_y_center"]
+        
+        # Don't forget last line
+        if current_line:
+            merged.append(self._merge_line_items(current_line))
+        
+        return merged
+    
+    def _merge_line_items(self, items: List[Dict]) -> Dict:
+        """Merge multiple items on the same line into one."""
+        if len(items) == 1:
+            return items[0]
+        
+        # Sort by X position (left to right)
+        items.sort(key=lambda x: x["bbox"][0][0])
+        
+        # Combine text with spaces
+        combined_text = " ".join(item["text"] for item in items)
+        
+        # Average confidence
+        avg_conf = sum(item["confidence"] for item in items) / len(items)
+        
+        # Combined bbox: leftmost x1, topmost y1, rightmost x2, bottommost y2
+        all_points = [p for item in items for p in item["bbox"]]
+        x_coords = [p[0] for p in all_points]
+        y_coords = [p[1] for p in all_points]
+        
+        combined_bbox = [
+            [min(x_coords), min(y_coords)],  # top-left
+            [max(x_coords), min(y_coords)],  # top-right
+            [max(x_coords), max(y_coords)],  # bottom-right
+            [min(x_coords), max(y_coords)]   # bottom-left
+        ]
+        
+        return {
+            "text": combined_text,
+            "confidence": avg_conf,
+            "bbox": combined_bbox,
+            "_y_center": items[0]["_y_center"]
+        }
+
+    def _prepare_image(self, image: Union[str, np.ndarray, Image.Image]) -> Optional[np.ndarray]:
+        """
+        Convert input to numpy array BGR compatible with Paddle.
+        
+        FIX: Skip conversion for grayscale (saves memory).
+        """
+        try:
+            if isinstance(image, str):
+                # File path - let OpenCV handle it
+                img = cv2.imread(image)
+                if img is None:
+                    logger.warning(f"Failed to read image: {image}")
+                return img
             
-        if isinstance(image, np.ndarray):
-            return image
+            if isinstance(image, Image.Image):
+                img_np = np.array(image)
+                
+                # FIX: Handle grayscale efficiently (no BGR conversion needed)
+                if len(img_np.shape) == 2:
+                    # Grayscale - PaddleOCR handles this
+                    return img_np
+                
+                if len(img_np.shape) == 3:
+                    if img_np.shape[2] == 3:  # RGB
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+                    elif img_np.shape[2] == 4:  # RGBA
+                        return cv2.cvtColor(img_np, cv2.COLOR_RGBA2BGR)
+                
+                return img_np
             
-        raise ValueError(f"Tipo de imagem desconhecido: {type(image)}")
+            if isinstance(image, np.ndarray):
+                # Already numpy - check if grayscale
+                if len(image.shape) == 2:
+                    # Grayscale, return as-is
+                    return image
+                return image
+            
+            logger.warning(f"Unknown image type: {type(image)}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Image preparation error: {e}")
+            return None
 
 
 # =============================================================================
-# TESTES
+# SINGLETON
+# =============================================================================
+
+_voter: Optional[PaddleOCRVoter] = None
+
+
+def get_paddle_voter() -> PaddleOCRVoter:
+    """Get or create the PaddleOCR voter singleton."""
+    global _voter
+    if _voter is None:
+        _voter = PaddleOCRVoter()
+    return _voter
+
+
+# =============================================================================
+# TESTS
 # =============================================================================
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    print("Testando PaddleOCRVoter...")
+    print("Testing PaddleOCRVoter...")
     
     voter = PaddleOCRVoter()
     
-    # Criar imagem sintética com texto
+    # Create synthetic image with text
     img = np.zeros((100, 300, 3), dtype=np.uint8) + 255
     cv2.putText(img, "TESTE 123", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
     
-    print("Rodando OCR em imagem sintética...")
-    # Nota: Pode falhar se paddleocr não estiver instalado
+    print("Running OCR on synthetic image...")
     try:
         text = voter.extract_text(img)
-        print(f"Texto extraído: '{text}'")
+        print(f"Extracted text: '{text}'")
     except MemoryError:
-        print("Erro de memória (esperado se não houver RAM suficiente)")
+        print("Memory error (expected if not enough RAM)")
     except Exception as e:
-        print(f"Erro ao rodar teste (possivelmente falta libs): {e}")
+        print(f"Test error (possibly missing libs): {e}")
