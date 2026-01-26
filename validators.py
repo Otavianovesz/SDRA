@@ -348,55 +348,86 @@ class OCRRepairEngine:
     """
     
     @staticmethod
-    def repair_nfe_access_key(key: str) -> Optional[str]:
+    def repair_nfe_access_key(key: str, max_attempts: int = 430) -> Optional[str]:
         """
-        Tenta reparar uma chave de acesso NFe iválida.
+        Tenta reparar uma chave de acesso NFe inválida.
         
-        Tenta substituir dígitos de baixa confiança ou força bruta 
-        de 1 dígito se o DV falhar.
+        OTIMIZADO: Prioriza dígitos com confusão OCR comum antes de força bruta.
+        Mapeamento de confusão OCR: 0↔6, 1↔7, 3↔8, 5↔6, 0↔O(já numérico)
         
         Args:
             key: Chave de acesso candidata (44 dígitos ou próximo)
+            max_attempts: Limite de tentativas para evitar travamento
             
         Returns:
             Chave válida ou None
         """
         clean_key = re.sub(r'[^\d]', '', key)
         
-        # Se tamanho errado (mas próximo), não tenta reparar por enquanto
-        # (complexidade exponencial)
+        # Se tamanho errado, não tenta reparar
         if len(clean_key) != 44:
             return None
             
         # Se já é válida, retorna
         if ChecksumValidators.validate_nfe_access_key(clean_key).is_valid:
             return clean_key
-            
-        # Tentar força bruta de 1 dígito (apenas se DV estiver errado)
-        # O DV é o último dígito (pos 43)
-        # Trocamos cada posição de 0-42 e recalcula
-        
-        # Otimização: Tentar apenas dígitos que parecem OCR errors
-        # Ex: 8 <-> 3, 1 <-> 7, 0 <-> 6, 5 <-> S (já numérico)
         
         logger.info(f"Tentando reparar chave NFe: {clean_key}")
         original_digits = list(clean_key)
+        attempts = 0
         
-        for i in range(43): # Não troca o DV (assume que ele pode estar certo)
+        # Mapeamento de confusão OCR (dígito -> possíveis substitutos)
+        OCR_CONFUSIONS = {
+            '0': ['6', '8', 'O'],
+            '1': ['7', 'I', 'l'],
+            '3': ['8'],
+            '5': ['6', 'S'],
+            '6': ['0', '5', '8'],
+            '7': ['1'],
+            '8': ['3', '0', '6'],
+        }
+        
+        # FASE 1: Tenta apenas substituições OCR-prováveis (muito mais rápido)
+        for i in range(43):
             original_char = original_digits[i]
             
-            # Tenta 0-9
+            if original_char in OCR_CONFUSIONS:
+                for substitute in OCR_CONFUSIONS[original_char]:
+                    if substitute.isdigit():
+                        original_digits[i] = substitute
+                        candidate = "".join(original_digits)
+                        attempts += 1
+                        
+                        if ChecksumValidators.validate_nfe_access_key(candidate).is_valid:
+                            logger.info(f"Chave REPARADA (OCR confusion) pos {i}: {original_char} -> {substitute}")
+                            return candidate
+                        
+                        if attempts >= max_attempts:
+                            logger.warning(f"Limite de tentativas atingido ({max_attempts})")
+                            return None
+                
+                # Restaura
+                original_digits[i] = original_char
+        
+        # FASE 2: Força bruta limitada se fase 1 falhou (apenas primeiros 20 dígitos)
+        for i in range(min(20, 43)):
+            original_char = original_digits[i]
+            
             for digit in "0123456789":
                 if digit == original_char:
                     continue
                     
                 original_digits[i] = digit
                 candidate = "".join(original_digits)
+                attempts += 1
                 
-                # Custo da verificação é baixo (matemático)
                 if ChecksumValidators.validate_nfe_access_key(candidate).is_valid:
-                    logger.info(f"Chave REPARADA na pos {i}: {original_char} -> {digit}")
+                    logger.info(f"Chave REPARADA (brute force) pos {i}: {original_char} -> {digit}")
                     return candidate
+                
+                if attempts >= max_attempts:
+                    logger.warning(f"Limite de tentativas atingido ({max_attempts})")
+                    return None
             
             # Restaura
             original_digits[i] = original_char

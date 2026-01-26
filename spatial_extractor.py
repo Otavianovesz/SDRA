@@ -173,6 +173,11 @@ class SpatialExtractor:
     2. Identifica âncoras (palavras-chave conhecidas)
     3. Define ROI (região de interesse) relativa à âncora
     4. Extrai e valida conteúdo da ROI
+    
+    Normalização DPI:
+    - Todas as coordenadas são normalizadas para uma "página canônica" de 612pt de largura
+    - Isso equivale a 72 DPI x 8.5" (tamanho Letter)
+    - ROIs são definidas em unidades relativas (% da página)
     """
     
     # Configurações
@@ -180,13 +185,25 @@ class SpatialExtractor:
     ROI_EXPANSION = 0.15    # Expansão da ROI se primeira tentativa falhar
     DPI_NORMALIZE = 72      # DPI base para normalização
     
-    def __init__(self):
-        self.page_width: float = 0
-        self.page_height: float = 0
+    # Página canônica para normalização de coordenadas
+    CANONICAL_WIDTH = 612.0   # 72 DPI × 8.5" = largura Letter
+    CANONICAL_HEIGHT = 792.0  # 72 DPI × 11" = altura Letter
+    
+    # ROI defaults em unidades relativas (% da página)
+    DEFAULT_ROI_WIDTH_PCT = 0.25   # 25% da largura da página
+    DEFAULT_ROI_HEIGHT_PCT = 0.06  # 6% da altura da página
+    
+    def __init__(self, db=None):
+        self.page_width: float = self.CANONICAL_WIDTH
+        self.page_height: float = self.CANONICAL_HEIGHT
         self.text_blocks: List[TextBlock] = []
         self.anchors: Dict[str, List[Anchor]] = {}
         self.method: ExtractionMethod = ExtractionMethod.DIGITAL
         self._force_ocr: bool = False
+        self._scale_factor: float = 1.0  # Fator de escala para normalização
+        self._original_width: float = 0   # Dimensões originais (antes da normalização)
+        self._original_height: float = 0
+        self.db = db  # Referência ao banco para Active Learning
     
     def load_pdf(self, path: Union[str, Path], page_num: int = 0) -> bool:
         """
@@ -222,22 +239,35 @@ class SpatialExtractor:
                 page_num = 0
             
             page = doc[page_num]
-            self.page_width = page.rect.width
-            self.page_height = page.rect.height
             
-            # Extrair palavras com coordenadas
+            # Guardar dimensões originais
+            self._original_width = page.rect.width
+            self._original_height = page.rect.height
+            
+            # Calcular fator de escala para normalizar para página canônica
+            self._scale_factor = self.CANONICAL_WIDTH / self._original_width
+            
+            # Usar dimensões normalizadas
+            self.page_width = self.CANONICAL_WIDTH
+            self.page_height = self._original_height * self._scale_factor
+            
+            logger.debug(f"DPI Normalization: {self._original_width:.0f}x{self._original_height:.0f} -> "
+                        f"{self.page_width:.0f}x{self.page_height:.0f} (scale={self._scale_factor:.3f})")
+            
+            # Extrair palavras com coordenadas NORMALIZADAS
             words = page.get_text("words")
             
             self.text_blocks = []
             for w in words:
                 # w = (x0, y0, x1, y1, "word", block_no, line_no, word_no)
                 if len(w) >= 5:
+                    # Aplicar normalização às coordenadas
                     self.text_blocks.append(TextBlock(
                         text=w[4],
-                        x0=w[0],
-                        y0=w[1],
-                        x1=w[2],
-                        y1=w[3]
+                        x0=w[0] * self._scale_factor,
+                        y0=w[1] * self._scale_factor,
+                        x1=w[2] * self._scale_factor,
+                        y1=w[3] * self._scale_factor
                     ))
             
             doc.close()
@@ -428,32 +458,54 @@ class SpatialExtractor:
         return priorities.get(field_name, {}).get(quadrant, 5)
     
     def define_roi(self, anchor: Anchor, direction: str = 'RIGHT', 
-                   width: float = 200, height: float = 50) -> Rect:
+                   width: float = None, height: float = None,
+                   width_pct: float = None, height_pct: float = None) -> Rect:
         """
-        Define ROI relativa à âncora.
+        Define ROI relativa à âncora usando unidades relativas.
         
         Args:
             anchor: Âncora de referência
             direction: 'RIGHT', 'BELOW', 'LEFT', 'ABOVE'
-            width: Largura da ROI
-            height: Altura da ROI
+            width: Largura em pixels (retrocompat) - será convertida para %
+            height: Altura em pixels (retrocompat) - será convertida para %
+            width_pct: Largura como % da página (0.0 a 1.0)
+            height_pct: Altura como % da página (0.0 a 1.0)
         
         Returns:
-            Retângulo da ROI
+            Retângulo da ROI em coordenadas normalizadas
         """
+        # Converter pixels antigos para percentuais (retrocompatibilidade)
+        if width is not None and width > 1.0:
+            width_pct = width / self.CANONICAL_WIDTH
+        if height is not None and height > 1.0:
+            height_pct = height / self.CANONICAL_HEIGHT
+        
+        # Usar defaults se não especificado
+        if width_pct is None:
+            width_pct = self.DEFAULT_ROI_WIDTH_PCT
+        if height_pct is None:
+            height_pct = self.DEFAULT_ROI_HEIGHT_PCT
+        
+        # Calcular dimensões absolutas na página canônica
+        roi_width = self.page_width * width_pct
+        roi_height = self.page_height * height_pct
+        
+        # Margem proporcional (1% da página)
+        margin = self.page_width * 0.01
+        
         ar = anchor.rect
         
         if direction == 'RIGHT':
-            return Rect(ar.x1, ar.y0 - 5, ar.x1 + width, ar.y1 + 5)
+            return Rect(ar.x1, ar.y0 - margin, ar.x1 + roi_width, ar.y1 + margin)
         elif direction == 'BELOW':
-            return Rect(ar.x0 - 10, ar.y1, ar.x1 + 50, ar.y1 + height)
+            return Rect(ar.x0 - margin, ar.y1, ar.x1 + roi_width * 0.3, ar.y1 + roi_height)
         elif direction == 'LEFT':
-            return Rect(ar.x0 - width, ar.y0 - 5, ar.x0, ar.y1 + 5)
+            return Rect(ar.x0 - roi_width, ar.y0 - margin, ar.x0, ar.y1 + margin)
         elif direction == 'ABOVE':
-            return Rect(ar.x0 - 10, ar.y0 - height, ar.x1 + 50, ar.y0)
+            return Rect(ar.x0 - margin, ar.y0 - roi_height, ar.x1 + roi_width * 0.3, ar.y0)
         else:
             # Default: direita e abaixo
-            return Rect(ar.x1, ar.y0 - 5, ar.x1 + width, ar.y1 + height)
+            return Rect(ar.x1, ar.y0 - margin, ar.x1 + roi_width, ar.y1 + roi_height)
     
     def extract_from_roi(self, roi: Rect, pattern_name: str = None) -> Optional[str]:
         """

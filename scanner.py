@@ -585,6 +585,322 @@ class CognitiveScanner:
         return duplicatas
     
     # ==========================================================================
+    # BATCH PIPELINE (WATERFALL PROCESSING - ELIMINATES MODEL THRASHING)
+    # ==========================================================================
+    
+    def scan_and_classify_all(self, files: List[Path] = None, 
+                               progress_callback=None) -> Dict[str, List[Path]]:
+        """
+        Estágio 1 do Pipeline Waterfall: Classifica todos os arquivos.
+        
+        Passa por todos os arquivos usando PyMuPDF (fast, sem IA) e categoriza:
+        - DIGITAL_OK: Texto nativo suficiente, não precisa de OCR
+        - NEEDS_OCR: Texto insuficiente, precisa de PaddleOCR
+        - NEEDS_VLM: OCR falhou ou documento muito complexo, precisa de Florence/Surya
+        
+        Args:
+            files: Lista de arquivos a processar (se None, usa scan_directory)
+            progress_callback: Callback(current, total, filename, category)
+            
+        Returns:
+            Dict com listas separadas: {'DIGITAL_OK': [...], 'NEEDS_OCR': [...], 'NEEDS_VLM': [...]}
+        """
+        if files is None:
+            files = list(self.scan_directory())
+        
+        result = {
+            'DIGITAL_OK': [],
+            'NEEDS_OCR': [],
+            'NEEDS_VLM': [],
+            'ERRORS': []
+        }
+        
+        total = len(files)
+        print(f"[STAGE 1] Classificando {total} arquivos...")
+        
+        for i, file_path in enumerate(files, 1):
+            if progress_callback:
+                progress_callback(i, total, file_path.name, "classifying")
+            
+            try:
+                doc = fitz.open(str(file_path))
+                if len(doc) == 0:
+                    doc.close()
+                    result['ERRORS'].append(file_path)
+                    continue
+                
+                page = doc[0]
+                text = page.get_text()
+                text_len = len(text.strip())
+                doc.close()
+                
+                # Classifica baseado na quantidade de texto
+                if text_len >= 200:
+                    # Texto rico - PDF digital, fast path
+                    result['DIGITAL_OK'].append(file_path)
+                elif text_len >= 50:
+                    # Texto parcial - pode precisar de OCR para completar
+                    result['NEEDS_OCR'].append(file_path)
+                else:
+                    # Pouco ou nenhum texto - necessita OCR completo
+                    result['NEEDS_OCR'].append(file_path)
+                    
+            except Exception as e:
+                print(f"  [ERROR] {file_path.name}: {e}")
+                result['ERRORS'].append(file_path)
+        
+        print(f"[STAGE 1] Resultado: {len(result['DIGITAL_OK'])} digitais, "
+              f"{len(result['NEEDS_OCR'])} para OCR, {len(result['ERRORS'])} erros")
+        
+        return result
+    
+    def process_batch_digital(self, files: List[Path], 
+                               progress_callback=None) -> Dict[Path, Dict[str, Any]]:
+        """
+        Processa arquivos digitais (texto nativo) em lote.
+        
+        Usa apenas PyMuPDF e SpatialExtractor - sem modelos pesados.
+        
+        Args:
+            files: Lista de arquivos a processar
+            progress_callback: Callback(current, total, filename, stage)
+            
+        Returns:
+            Dict[file_path -> extraction_result]
+        """
+        results = {}
+        total = len(files)
+        
+        print(f"[STAGE 2a] Processando {total} arquivos digitais...")
+        
+        for i, file_path in enumerate(files, 1):
+            if progress_callback:
+                progress_callback(i, total, file_path.name, "digital")
+            
+            try:
+                # Usa o hierarchical_extract mas força o fast path
+                result = self.hierarchical_extract(file_path, 0, DocumentType.UNKNOWN)
+                results[file_path] = result
+            except Exception as e:
+                print(f"  [ERROR] {file_path.name}: {e}")
+                results[file_path] = {'error': str(e), 'confidence': 0.0}
+        
+        return results
+    
+    def process_batch_ocr(self, files: List[Path], 
+                          progress_callback=None) -> Dict[Path, Dict[str, Any]]:
+        """
+        Estágio 2b: Processa arquivos que precisam de OCR em LOTE.
+        
+        OTIMIZAÇÃO CRÍTICA: Carrega PaddleOCR UMA VEZ, processa todos os arquivos,
+        depois descarrega. Isso elimina o thrashing que consumia 2-5s por arquivo.
+        
+        Args:
+            files: Lista de arquivos que precisam de OCR
+            progress_callback: Callback(current, total, filename, stage)
+            
+        Returns:
+            Dict[file_path -> extraction_result]
+        """
+        if not files:
+            return {}
+        
+        results = {}
+        total = len(files)
+        paddle_voter = None
+        
+        print(f"[STAGE 2b] Processando {total} arquivos com OCR...")
+        
+        try:
+            # CARREGA PADDLE UMA VEZ
+            from paddle_voter import get_paddle_voter
+            paddle_voter = get_paddle_voter()
+            paddle_voter.load_model()  # Force load
+            print("  [PADDLE] Modelo carregado para batch processing")
+            
+            for i, file_path in enumerate(files, 1):
+                if progress_callback:
+                    progress_callback(i, total, file_path.name, "ocr")
+                
+                try:
+                    doc = fitz.open(str(file_path))
+                    if len(doc) == 0:
+                        doc.close()
+                        continue
+                    
+                    page = doc[0]
+                    
+                    # Render at 150 DPI
+                    matrix = fitz.Matrix(1.5, 1.5)
+                    pix = page.get_pixmap(matrix=matrix)
+                    
+                    from PIL import Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    del pix
+                    
+                    # OCR com modelo já carregado
+                    ocr_text = paddle_voter.extract_text(img)
+                    
+                    # Extrai dados via regex
+                    result = {
+                        'amount_cents': self.extract_amount(ocr_text) if ocr_text else 0,
+                        'due_date': self.extract_due_date(ocr_text) if ocr_text else None,
+                        'emission_date': self.extract_emission_date(ocr_text) if ocr_text else None,
+                        'cnpj': None,
+                        'entity_tag': self.extract_entity(ocr_text) if ocr_text else None,
+                        'confidence': 0.7,
+                        'extraction_path': 'batch_ocr',
+                        'needs_review': False
+                    }
+                    
+                    # CNPJ
+                    cnpj_match = REGEX_PATTERNS["cnpj"].search(ocr_text) if ocr_text else None
+                    if cnpj_match:
+                        result['cnpj'] = cnpj_match.group(1)
+                    
+                    results[file_path] = result
+                    
+                    del img
+                    doc.close()
+                    
+                except Exception as e:
+                    print(f"  [ERROR] {file_path.name}: {e}")
+                    results[file_path] = {'error': str(e), 'confidence': 0.0}
+                
+                # Cleanup periódico
+                if i % 10 == 0:
+                    gc.collect()
+                    
+        except ImportError:
+            print("  [WARN] PaddleOCR não disponível, usando fallback")
+            # Fallback: processa sem OCR
+            for file_path in files:
+                results[file_path] = self.hierarchical_extract(file_path, 0, DocumentType.UNKNOWN)
+        
+        finally:
+            # DESCARREGA PADDLE
+            if paddle_voter:
+                try:
+                    paddle_voter.unload_model()
+                    print("  [PADDLE] Modelo descarregado após batch")
+                except:
+                    pass
+            gc.collect()
+            gc.collect()
+        
+        return results
+    
+    def process_batch_vlm(self, files: List[Path], 
+                          progress_callback=None) -> Dict[Path, Dict[str, Any]]:
+        """
+        Estágio 3: Processa arquivos difíceis com VLM em LOTE.
+        
+        OTIMIZAÇÃO CRÍTICA: Carrega Florence-2/Surya UMA VEZ, processa todos,
+        depois descarrega.
+        
+        Args:
+            files: Lista de arquivos que precisam de VLM
+            progress_callback: Callback(current, total, filename, stage)
+            
+        Returns:
+            Dict[file_path -> extraction_result]
+        """
+        if not files:
+            return {}
+        
+        results = {}
+        total = len(files)
+        vlm_voter = None
+        
+        print(f"[STAGE 3] Processando {total} arquivos com VLM...")
+        
+        try:
+            # Tenta Florence-2 primeiro
+            from florence2_voter import get_florence2_voter
+            vlm_voter = get_florence2_voter()
+            vlm_voter.load_model()
+            vlm_name = "Florence-2"
+            print(f"  [{vlm_name}] Modelo carregado para batch processing")
+        except ImportError:
+            try:
+                from surya_voter import get_surya_voter
+                vlm_voter = get_surya_voter()
+                vlm_voter.load_model()
+                vlm_name = "Surya"
+                print(f"  [{vlm_name}] Modelo carregado para batch processing")
+            except ImportError:
+                print("  [WARN] Nenhum VLM disponível, retornando vazio")
+                return results
+        
+        try:
+            for i, file_path in enumerate(files, 1):
+                if progress_callback:
+                    progress_callback(i, total, file_path.name, "vlm")
+                
+                try:
+                    doc = fitz.open(str(file_path))
+                    if len(doc) == 0:
+                        doc.close()
+                        continue
+                    
+                    page = doc[0]
+                    
+                    # Render at 300 DPI para VLM
+                    matrix = fitz.Matrix(2.0, 2.0)
+                    pix = page.get_pixmap(matrix=matrix)
+                    
+                    from PIL import Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    del pix
+                    
+                    # VLM extraction
+                    vlm_text = vlm_voter.extract_text(img)
+                    
+                    # Extrai dados via regex
+                    result = {
+                        'amount_cents': self.extract_amount(vlm_text) if vlm_text else 0,
+                        'due_date': self.extract_due_date(vlm_text) if vlm_text else None,
+                        'emission_date': self.extract_emission_date(vlm_text) if vlm_text else None,
+                        'cnpj': None,
+                        'entity_tag': self.extract_entity(vlm_text) if vlm_text else None,
+                        'confidence': 0.65,
+                        'extraction_path': f'batch_{vlm_name.lower()}',
+                        'needs_review': True
+                    }
+                    
+                    # CNPJ
+                    cnpj_match = REGEX_PATTERNS["cnpj"].search(vlm_text) if vlm_text else None
+                    if cnpj_match:
+                        result['cnpj'] = cnpj_match.group(1)
+                    
+                    results[file_path] = result
+                    
+                    del img
+                    doc.close()
+                    
+                except Exception as e:
+                    print(f"  [ERROR] {file_path.name}: {e}")
+                    results[file_path] = {'error': str(e), 'confidence': 0.0}
+                
+                # Cleanup periódico
+                if i % 5 == 0:
+                    gc.collect()
+                    
+        finally:
+            # DESCARREGA VLM
+            if vlm_voter:
+                try:
+                    vlm_voter.unload_model()
+                    print(f"  [{vlm_name}] Modelo descarregado após batch")
+                except:
+                    pass
+            gc.collect()
+            gc.collect()
+            gc.collect()
+        
+        return results
+
+    # ==========================================================================
     # HIERARCHICAL EXTRACTION (8GB RAM OPTIMIZED)
     # ==========================================================================
     

@@ -59,13 +59,26 @@ class SuryaVoter:
             return
         
         try:
-            # Force CPU and disable gradients
-            import torch
-            torch.set_grad_enabled(False)
+            # Force CPU and disable gradients - import inside function to avoid circular import
+            try:
+                import torch
+                torch.set_grad_enabled(False)
+                # Set CPU-only mode
+                if hasattr(torch, 'set_default_device'):
+                    torch.set_default_device('cpu')
+            except ImportError:
+                pass
             
             logger.info("Loading Surya models (CPU-only)...")
-            from surya.detection import DetectionPredictor
-            from surya.recognition import RecognitionPredictor
+            
+            # Import Surya modules with explicit error handling
+            try:
+                from surya.detection import DetectionPredictor
+                from surya.recognition import RecognitionPredictor
+            except ImportError as e:
+                logger.warning(f"Surya modules not found: {e}")
+                self.loaded = False
+                return
             
             # Try to load FoundationPredictor (newer API)
             try:
@@ -74,6 +87,10 @@ class SuryaVoter:
                 self.recognizer = RecognitionPredictor(self.foundation)
             except ImportError:
                 # Fallback for older API
+                self.recognizer = RecognitionPredictor()
+                self.foundation = None
+            except Exception as e:
+                logger.warning(f"FoundationPredictor failed, using fallback: {e}")
                 self.recognizer = RecognitionPredictor()
                 self.foundation = None
             
@@ -86,6 +103,8 @@ class SuryaVoter:
             self.loaded = False
         except Exception as e:
             logger.warning(f"Failed to load Surya: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             self.loaded = False
 
     def unload_model(self):

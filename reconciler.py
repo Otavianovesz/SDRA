@@ -14,11 +14,35 @@ logger = logging.getLogger(__name__)
 class Reconciler:
     
     @staticmethod
-    def find_matches(boletos: List[Dict], nfes: List[Dict]) -> List[Dict]:
+    def find_matches(boletos: List[Dict], nfes: List[Dict], 
+                     date_tolerance_days: int = 15) -> List[Dict]:
         """
         Encontra matches entre Boletos e NFEs.
         Suporta 1:1 e N:1 (Várias NFEs somando um Boleto).
+        
+        OTIMIZAÇÃO: Aplica restrição temporal para reduzir explosão combinatória.
+        Só considera NFEs emitidas até date_tolerance_days antes do vencimento do boleto.
+        
+        Args:
+            boletos: Lista de boletos
+            nfes: Lista de NFEs
+            date_tolerance_days: Tolerância em dias para match temporal (default: 15)
         """
+        from datetime import datetime, timedelta
+        
+        def parse_date(d: str) -> datetime:
+            if not d:
+                return None
+            try:
+                for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"]:
+                    try:
+                        return datetime.strptime(d, fmt)
+                    except ValueError:
+                        continue
+            except:
+                pass
+            return None
+        
         matches = []
         
         # Indexar NFEs por Fornecedor (normalizado) para performance
@@ -33,11 +57,31 @@ class Reconciler:
         for boleto in boletos:
             b_val = boleto.get('amount_cents', 0)
             b_supp = boleto.get('supplier_clean', 'UNKNOWN')
+            b_due = parse_date(boleto.get('due_date'))
             
             if b_val <= 0:
                 continue
                 
-            candidates = nfes_by_supplier.get(b_supp, [])
+            all_candidates = nfes_by_supplier.get(b_supp, [])
+            if not all_candidates:
+                continue
+            
+            # OTIMIZAÇÃO: Filtrar por janela temporal
+            if b_due and date_tolerance_days > 0:
+                min_date = b_due - timedelta(days=date_tolerance_days + 30)  # NFE antes do boleto
+                max_date = b_due + timedelta(days=date_tolerance_days)
+                
+                candidates = []
+                for nfe in all_candidates:
+                    nfe_date = parse_date(nfe.get('emission_date'))
+                    if nfe_date is None:
+                        # Se não tem data, inclui por segurança
+                        candidates.append(nfe)
+                    elif min_date <= nfe_date <= max_date:
+                        candidates.append(nfe)
+            else:
+                candidates = all_candidates
+            
             if not candidates:
                 continue
                 
@@ -61,8 +105,8 @@ class Reconciler:
                 
             # 2. Match Subset Sum (N:1) - CUIDADO: Custo Exponencial
             # Limita candidatos (Step 121)
-            if len(candidates) > 12:
-                candidates = candidates[:12] # Heurística de segurança
+            if len(candidates) > 10:
+                candidates = candidates[:10]  # Heurística de segurança
                 
             # Tenta combinações de 2 a 5 notas
             found_subset = False

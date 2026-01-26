@@ -53,24 +53,19 @@ class PaddleOCRVoter:
         try:
             from paddleocr import PaddleOCR
             
-            logger.info("Loading PaddleOCR (CPU-optimized)...")
+            logger.info("Loading PaddleOCR (CPU)...")
             
-            # CPU-optimized configuration
+            # Minimal configuration for maximum compatibility
+            # MKLDNN disabled to avoid OneDNN attribute conversion errors
+            import os
+            os.environ['FLAGS_use_mkldnn'] = '0'
+            
             self._model = PaddleOCR(
-                use_angle_cls=config.PADDLE_CONFIG["use_angle_cls"],
-                lang=config.PADDLE_CONFIG["lang"],
-                use_gpu=config.PADDLE_CONFIG["use_gpu"],
-                enable_mkldnn=config.PADDLE_CONFIG["enable_mkldnn"],
-                cpu_threads=config.PADDLE_CONFIG["cpu_threads"],
-                show_log=False,
-                det_db_score_mode=config.PADDLE_CONFIG["det_db_score_mode"],
-                rec_batch_num=config.PADDLE_CONFIG["rec_batch_num"],
-                det_limit_side_len=config.PADDLE_CONFIG["det_limit_side_len"],
-                det_limit_type='max'
+                lang=config.PADDLE_CONFIG.get("lang", "pt")
             )
             
             self._loaded = True
-            logger.info("PaddleOCR loaded (CPU, MKLDNN enabled)")
+            logger.info("PaddleOCR loaded")
             return self._model
             
         except ImportError:
@@ -114,8 +109,8 @@ class PaddleOCRVoter:
             if img_array is None:
                 return ""
             
-            # Run OCR with angle classification
-            result = model.ocr(img_array, cls=True)
+            # Run OCR (new API doesn't support cls= argument)
+            result = model.ocr(img_array)
             
             if not result or result[0] is None:
                 return ""
@@ -160,7 +155,7 @@ class PaddleOCRVoter:
             if img_array is None:
                 return []
             
-            result = model.ocr(img_array, cls=True)
+            result = model.ocr(img_array)
             
             output = []
             if result and result[0]:

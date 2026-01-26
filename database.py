@@ -355,11 +355,119 @@ class SRDADatabase:
             stats['total_documents'] = self.connection.execute("SELECT COUNT(*) FROM documentos").fetchone()[0]
             stats['total_transactions'] = self.connection.execute("SELECT COUNT(*) FROM transacoes").fetchone()[0]
             stats['total_matches'] = self.connection.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
+            stats['total_corrections'] = self.connection.execute("SELECT COUNT(*) FROM corrections_log").fetchone()[0]
         except:
              stats['total_documents'] = 0
              stats['total_transactions'] = 0
              stats['total_matches'] = 0
+             stats['total_corrections'] = 0
         return stats
+
+    # ==========================================================================
+    # ACTIVE LEARNING - Correções e Aprendizado
+    # ==========================================================================
+    
+    def log_correction(self, doc_id: int, field_name: str, ocr_value: Optional[str],
+                       user_value: str, original_confidence: Optional[float] = None,
+                       extractor_source: Optional[str] = None, bbox: Optional[str] = None,
+                       image_hash: Optional[str] = None) -> Optional[int]:
+        """
+        Registra uma correção do usuário para Active Learning.
+        
+        Args:
+            doc_id: ID do documento corrigido
+            field_name: Nome do campo (fornecedor, valor, data_vencimento, etc.)
+            ocr_value: Valor original extraído pelo OCR
+            user_value: Valor correto informado pelo usuário
+            original_confidence: Confiança original da extração
+            extractor_source: Fonte da extração (spatial, paddle, florence, etc.)
+            bbox: Bounding box do campo (para aprendizado espacial)
+            image_hash: Hash da imagem para evitar duplicatas
+            
+        Returns:
+            ID da correção inserida ou None
+        """
+        try:
+            res = self.connection.execute("""
+                INSERT INTO corrections_log 
+                (doc_id, field_name, ocr_value, user_value, original_confidence, 
+                 extractor_source, bbox, image_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
+            """, [doc_id, field_name, ocr_value, user_value, original_confidence,
+                  extractor_source, bbox, image_hash]).fetchone()
+            
+            logger.info(f"[ACTIVE LEARNING] Correção registrada: doc={doc_id}, "
+                       f"campo={field_name}, '{ocr_value}' -> '{user_value}'")
+            return res[0] if res else None
+        except Exception as e:
+            logger.error(f"Erro ao registrar correção: {e}")
+            return None
+    
+    def get_learned_offsets(self, supplier: str, field_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Recupera offsets espaciais aprendidos para um fornecedor/campo.
+        
+        Usado pelo SpatialExtractor para ajustar ROIs baseado em correções anteriores.
+        
+        Args:
+            supplier: Nome do fornecedor (normalizado)
+            field_name: Nome do campo a buscar
+            
+        Returns:
+            Dict com offset aprendido ou None se não houver correções
+        """
+        try:
+            # Busca a correção mais recente para este fornecedor/campo
+            result = self.connection.execute("""
+                SELECT cl.bbox, cl.user_value, cl.extractor_source, cl.created_at
+                FROM corrections_log cl
+                JOIN documentos d ON cl.doc_id = d.id
+                JOIN transacoes t ON d.id = t.doc_id
+                WHERE UPPER(t.supplier_clean) = UPPER(?)
+                  AND cl.field_name = ?
+                ORDER BY cl.created_at DESC
+                LIMIT 1
+            """, [supplier, field_name]).fetchone()
+            
+            if result:
+                return {
+                    'bbox': result[0],
+                    'learned_value': result[1],
+                    'source': result[2],
+                    'learned_at': result[3]
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Erro ao buscar offsets aprendidos: {e}")
+            return None
+    
+    def get_correction_history(self, field_name: Optional[str] = None, 
+                               limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Retorna histórico de correções para análise/auditoria.
+        
+        Args:
+            field_name: Filtrar por campo específico (opcional)
+            limit: Máximo de registros a retornar
+            
+        Returns:
+            Lista de correções ordenadas por data
+        """
+        query = """
+            SELECT cl.*, d.doc_type, t.supplier_clean
+            FROM corrections_log cl
+            JOIN documentos d ON cl.doc_id = d.id
+            LEFT JOIN transacoes t ON d.id = t.doc_id
+        """
+        params = []
+        
+        if field_name:
+            query += " WHERE cl.field_name = ?"
+            params.append(field_name)
+        
+        query += f" ORDER BY cl.created_at DESC LIMIT {limit}"
+        
+        return self._fetchall_as_dict(query, params)
 
     def close(self):
         if self._connection:

@@ -75,9 +75,25 @@ class Florence2Voter:
         try:
             logger.info(f"Loading Florence-2 ({self.model_id}) on CPU...")
             
-            from transformers import AutoProcessor, AutoModelForCausalLM
+            # Try different processor imports based on transformers version
+            processor_cls = None
+            try:
+                from transformers import AutoProcessor
+                processor_cls = AutoProcessor
+            except ImportError:
+                try:
+                    from transformers import AutoImageProcessor
+                    processor_cls = AutoImageProcessor
+                except ImportError:
+                    try:
+                        from transformers import CLIPProcessor as processor_cls
+                    except ImportError:
+                        logger.warning("No suitable processor class found in transformers")
+                        return
             
-            self.processor = AutoProcessor.from_pretrained(
+            from transformers import AutoModelForCausalLM
+            
+            self.processor = processor_cls.from_pretrained(
                 self.model_id, 
                 trust_remote_code=True
             )
@@ -97,6 +113,8 @@ class Florence2Voter:
             
         except Exception as e:
             logger.warning(f"Failed to load Florence-2: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             self.model = None
             self.processor = None
 
