@@ -95,15 +95,22 @@ class Florence2Voter:
             
             self.processor = processor_cls.from_pretrained(
                 self.model_id, 
-                trust_remote_code=True
+                trust_remote_code=True,
+                revision="refs/pr/6"  # FIX: Mesma revisão do modelo
             )
             
             # CRITICAL: Use float32 on CPU (float16 is slower and less accurate on CPU)
+            # BLINDAGEM 1: Forçar attn_implementation="eager" para evitar erro de SDPA
+            # BLINDAGEM 2: Travar na revisão "refs/pr/6" que é estável
+            # O erro '_supports_sdpa' ocorre quando transformers tenta usar SDPA
+            # em código de modelo que não suporta este atributo
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_id,
                 trust_remote_code=True,
                 torch_dtype=torch.float32,  # FIX: Was float16
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
+                attn_implementation="eager",  # FIX: Evita erro _supports_sdpa
+                revision="refs/pr/6"  # FIX: Trava versão estável do código
             ).to(self.device)
             
             # Put in eval mode

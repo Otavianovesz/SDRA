@@ -642,6 +642,76 @@ class SpatialExtractor:
             method=self.method
         )
     
+    def extract_cnpj_intelligent(self) -> Optional[ExtractionResult]:
+        """
+        Extrai CNPJ penalizando os que estão na área de 'Pagador'.
+        
+        O CNPJ correto (Fornecedor) está perto de palavras como 
+        "Beneficiário", "Cedente", "Emitente".
+        O CNPJ errado está perto de "Pagador", "Sacado".
+        
+        Returns:
+            ExtractionResult com o CNPJ do fornecedor (não do pagador)
+        """
+        full_text = self.get_full_text()
+        text_upper = full_text.upper()
+        
+        candidates = []
+        
+        # Encontra todos os CNPJs no documento
+        for match in PATTERNS['cnpj'].finditer(full_text):
+            cnpj = match.group(1)
+            start, end = match.span()
+            
+            # Contexto: Olhar 150 caracteres antes
+            context_start = max(0, start - 150)
+            context_window = text_upper[context_start:start]
+            
+            score = 1.0
+            anchor_used = "CNPJ_GENERIC"
+            
+            # Penalidades (área de pagador - CNPJ do cliente, não do fornecedor)
+            penalty_keywords = ["PAGADOR", "SACADO", "DESTINAT", "CLIENTE"]
+            for kw in penalty_keywords:
+                if kw in context_window:
+                    score -= 0.8  # Quase certeza que é o cliente, não o fornecedor
+                    anchor_used = f"CNPJ_PENALIZED_{kw}"
+                    break
+            
+            # Bônus (área de fornecedor)
+            bonus_keywords = ["BENEFICIARIO", "CEDENTE", "EMITENTE", "FAVORECIDO", "FORNECEDOR"]
+            for kw in bonus_keywords:
+                if kw in context_window:
+                    score += 0.5
+                    anchor_used = f"CNPJ_BONUS_{kw}"
+                    break
+            
+            candidates.append({
+                'cnpj': cnpj,
+                'score': score,
+                'anchor': anchor_used,
+                'position': start
+            })
+        
+        if not candidates:
+            return None
+        
+        # Ordena por score (maior primeiro), depois por posição (primeiro no doc)
+        candidates.sort(key=lambda x: (-x['score'], x['position']))
+        
+        # Retorna o CNPJ com maior score, desde que score > 0.3
+        best = candidates[0]
+        if best['score'] > 0.3:
+            return ExtractionResult(
+                field_name='cnpj_emissor',
+                value=best['cnpj'],
+                confidence=min(0.9, 0.5 + best['score'] * 0.4),
+                anchor_used=best['anchor'],
+                method=self.method
+            )
+        
+        return None
+    
     def extract_all(self) -> Dict[str, ExtractionResult]:
         """
         Extrai todos os campos disponíveis.
@@ -670,6 +740,13 @@ class SpatialExtractor:
             result = self.extract_value_bottom_heavy()
             if result:
                 results['amount'] = result
+        
+        # MELHORIA: Fallback inteligente para CNPJ do fornecedor
+        # Usa extract_cnpj_intelligent se a extração por âncora falhou ou tem baixa confiança
+        if 'cnpj_emissor' not in results or results.get('cnpj_emissor', {}).confidence < 0.7:
+            intelligent_cnpj = self.extract_cnpj_intelligent()
+            if intelligent_cnpj:
+                results['cnpj_emissor'] = intelligent_cnpj
         
         return results
     

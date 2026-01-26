@@ -13,6 +13,7 @@ Este modulo atua como os "olhos" do sistema, responsavel por:
 Referencia: Automacao e Reconciliacao Financeira com IA.txt (Secao 3)
 """
 
+import gc
 import fitz  # PyMuPDF
 import re
 import os
@@ -23,7 +24,16 @@ from dataclasses import dataclass
 from enum import Enum
 
 import config
+import config
 from resource_manager import get_resource_manager
+from lazy_model_manager import get_model_manager
+from validators import sanitize_dates
+from spatial_extractor import get_spatial_extractor
+from florence2_voter import get_florence2_voter
+
+# Configuração de Logger
+import logging
+logger = logging.getLogger(__name__)
 
 # Importa o modulo de banco de dados
 from database import (
@@ -117,13 +127,15 @@ SCHEDULING_KEYWORDS = [
 
 # Regex para extracao de dados
 REGEX_PATTERNS = {
-    # Valor monetario brasileiro (ex: R$ 3.300,00 ou 1.740,00)
+    # Valor monetario brasileiro COM PREFIXO (ex: R$ 3.300,00 ou Total: 1.740,00)
+    # MELHORIA: Captura R$ com espaços opcionais e formatos variados de milhar
     "amount": re.compile(
-        r'(?:R\$|Total|Valor|VALOR)\s*[:\.]?\s*([\d\.]+,\d{2})',
+        r'(?:R\$|Total|Valor|VALOR|Pagar|PAGAR|Líquido|LIQUIDO)\s*[:\.]?\s*(\d{1,3}(?:\.\d{3})*,\d{2})',
         re.IGNORECASE
     ),
     
     # Valor alternativo sem prefixo (busca valores grandes)
+    # MELHORIA: Exige contexto mínimo de formatação (X.XXX,XX) para evitar pegar telefones/CEPs
     "amount_plain": re.compile(
         r'\b(\d{1,3}(?:\.\d{3})*,\d{2})\b'
     ),
@@ -273,7 +285,7 @@ class CognitiveScanner:
         self.ensemble = None
         if ENSEMBLE_AVAILABLE:
             try:
-                self.ensemble = EnsembleExtractor(use_gliner=True, use_ocr=True)
+                self.ensemble = EnsembleExtractor(high_accuracy=True)
                 print("[OK] EnsembleExtractor ativado (GLiNER + OCR)")
             except Exception as e:
                 print(f"[AVISO] Falha ao iniciar EnsembleExtractor: {e}")
@@ -583,6 +595,179 @@ class CognitiveScanner:
             })
         
         return duplicatas
+    
+    # ==========================================================================
+    # EXTRAÇÃO HIERÁRQUICA BLINDADA (CORE)
+    # ==========================================================================
+    
+    def hierarchical_extract(self, file_path: Path, page_num: int = 0, doc_type: DocumentType = None) -> Dict[str, Any]:
+        """
+        Extração Hierárquica Blindada (Digital -> OCR -> VLM).
+        
+        Implementa a lógica 'Sniper' com fallbacks progressivos e proteção contra crashes.
+        
+        Args:
+            file_path: Caminho do arquivo
+            page_num: Número da página
+            doc_type: Tipo de documento (opcional)
+            
+        Returns:
+            Dict com dados extraídos
+        """
+        # Resultado padrão (segurança)
+        result = {
+            "amount_cents": 0, "due_date": None, "emission_date": None,
+            "supplier_name": None, "cnpj": None, "entity_tag": None,
+            "confidence": 0.0, "doc_type": str(doc_type) if doc_type else None,
+            "extraction_path": "failed", "error": None
+        }
+
+        try:
+            # --- PATH 1: DIGITAL (Rápido) ---
+            # Usa SpatialExtractor para extração geométrica precisa
+            spatial = get_spatial_extractor()
+            if spatial.load_pdf(file_path, page_num):
+                # Extração espacial completa (incluindo CNPJ inteligente)
+                spatial_results = spatial.extract_all()
+                
+                # Consolidar resultados
+                if 'amount' in spatial_results:
+                    val_str = spatial_results['amount'].value
+                    result['amount_cents'] = SRDADatabase.amount_to_cents(val_str)
+                    result['confidence'] = spatial_results['amount'].confidence
+                
+                if 'due_date' in spatial_results:
+                    result['due_date'] = self._parse_date(spatial_results['due_date'].value)
+                
+                if 'emission_date' in spatial_results:
+                    result['emission_date'] = self._parse_date(spatial_results['emission_date'].value)
+                
+                if 'cnpj_emissor' in spatial_results:
+                    result['cnpj'] = spatial_results['cnpj_emissor'].value
+                
+                result['extraction_path'] = "digital_spatial"
+                
+                # Se confiança alta e valor encontrado, retorna (Fast Path Success)
+                if result['confidence'] > 0.85 and result['amount_cents'] > 0:
+                    # Sanitiza antes de retornar
+                    e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
+                    result['emission_date'] = e_date
+                    result['due_date'] = d_date
+                    return result
+
+            # --- PATH 2: OCR (Paddle - Robusto) ---
+            # Se falhou digital, Paddle é obrigatório se quisermos evitar VLM
+            ocr_text = ""
+            
+            # Tenta usar o Ensemble OCR (se disponível e carregado)
+            if self.ensemble and getattr(self.ensemble, 'ocr_voter', None):
+                try:
+                    ocr_res = self.ensemble.ocr_voter.extract_structured(file_path, page_num)
+                    ocr_text = ocr_res.get('text', '')
+                    result['extraction_path'] = "ocr_ensemble"
+                except Exception as e:
+                    logger.debug(f"Ensemble OCR indisponível: {e}")
+
+            # Fallback manual para Paddle se Ensemble falhar
+            if not ocr_text:
+                try:
+                    from paddle_voter import get_paddle_voter
+                    pv = get_paddle_voter()
+                    # Conversão rápida para imagem
+                    doc = fitz.open(str(file_path))
+                    page = doc[page_num]
+                    # 1.5x zoom = 150 DPI
+                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+                    from PIL import Image
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    ocr_text = pv.extract_text(img)
+                    result['extraction_path'] = "ocr_fallback"
+                    doc.close()
+                except ImportError:
+                    pass # Sem paddle instalado
+                except Exception as e:
+                    logger.warning(f"Falha no Paddle OCR fallback: {e}")
+
+            if ocr_text:
+                # Extração Regex sobre OCR
+                amt = self.extract_amount(ocr_text)
+                if amt > 0:
+                    result['amount_cents'] = amt
+                    result['confidence'] = 0.7
+                
+                dd = self.extract_due_date(ocr_text)
+                if dd: result['due_date'] = dd
+                
+                ed = self.extract_emission_date(ocr_text)
+                if ed: result['emission_date'] = ed
+                
+                # CNPJ via Regex
+                cnpj_match = REGEX_PATTERNS["cnpj"].search(ocr_text)
+                if cnpj_match:
+                    result['cnpj'] = cnpj_match.group(1)
+                
+                # Se a confiança for aceitável, PARE AQUI.
+                if result['confidence'] >= 0.7: 
+                    # Sanitiza antes de retornar
+                    e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
+                    result['emission_date'] = e_date
+                    result['due_date'] = d_date
+                    return result
+
+            # --- PATH 3: VLM (Florence-2 - Último Recurso) ---
+            # Protegido por Try/Except específico para não crashar o loop
+            try:
+                # Só carrega se realmente necessário
+                logger.info(f"Acionando VLM (Heavy Path) para {file_path.name}")
+                
+                florence = get_florence2_voter()
+                
+                # Extrai texto com regions
+                vlm_res = florence.extract_from_pdf(str(file_path), page_num)
+                
+                if 'text' in vlm_res:
+                    vlm_text = vlm_res['text']
+                    
+                    # Re-aplica regex sobre texto superior do VLM
+                    amt_vlm = self.extract_amount(vlm_text)
+                    if amt_vlm > 0:
+                        result['amount_cents'] = amt_vlm
+                        result['confidence'] = 0.6  # Confiança menor pois é expensive
+                        result['extraction_path'] = "vlm_florence"
+                    
+                    if not result['due_date']:
+                        result['due_date'] = self.extract_due_date(vlm_text)
+                    
+                    if not result['emission_date']:
+                        result['emission_date'] = self.extract_emission_date(vlm_text)
+            
+            except AttributeError as ae:
+                # Captura o erro específico do SDPA se a correção do ponto 1 falhar
+                logger.error(f"Erro de compatibilidade no Florence-2: {ae}")
+                result['error'] = "Florence-2 Incompatible"
+            except Exception as e:
+                logger.error(f"Erro genérico no VLM: {e}")
+                
+        except Exception as e:
+            logger.critical(f"Erro catastrófico no arquivo {file_path}: {e}")
+            result["error"] = str(e)
+            import traceback
+            logger.debug(traceback.format_exc())
+
+        # --- FINAL: SANITIZAÇÃO LÓGICA ---
+        # Aplica a correção de datas invertidas antes de retornar
+        e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
+        result['emission_date'] = e_date
+        result['due_date'] = d_date
+        
+        # Identificação de entidade se faltar
+        if not result['entity_tag']:
+            # Tenta inferir pelo CNPJ extraído
+            if result['cnpj']:
+                 # Lógica simplificada - poderia usar DB mas por segurança apenas logamos
+                 pass
+
+        return result
     
     # ==========================================================================
     # BATCH PIPELINE (WATERFALL PROCESSING - ELIMINATES MODEL THRASHING)

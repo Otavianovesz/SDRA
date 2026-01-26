@@ -32,6 +32,72 @@ class ValidationResult:
     confidence_impact: float = 0.0  # -1.0 a 1.0
 
 
+# =============================================================================
+# FUNÇÕES UTILITÁRIAS DE SANITIZAÇÃO
+# =============================================================================
+
+def _parse_date_for_sanitize(date_str: Optional[str]) -> Optional[date]:
+    """
+    Parse de data para sanitização.
+    
+    Aceita formatos: YYYY-MM-DD, DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+    """
+    if not date_str:
+        return None
+    
+    # Se já está em formato ISO (YYYY-MM-DD)
+    if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        try:
+            return datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return None
+    
+    # Formato brasileiro (DD/MM/YYYY ou DD.MM.YYYY ou DD-MM-YYYY)
+    match = re.match(r'^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})$', date_str)
+    if match:
+        day, month, year = match.groups()
+        if len(year) == 2:
+            year = '20' + year if int(year) < 50 else '19' + year
+        try:
+            return date(int(year), int(month), int(day))
+        except ValueError:
+            return None
+    
+    return None
+
+
+def sanitize_dates(emission: Optional[str], due: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Corrige inversão lógica de datas.
+    
+    Regra: Se Vencimento < Emissão, provavelmente estão trocados.
+    (Assumindo que não processamos contas vencidas retroativas frequentemente)
+    
+    Args:
+        emission: Data de emissão (qualquer formato aceito)
+        due: Data de vencimento (qualquer formato aceito)
+        
+    Returns:
+        Tuple (emission, due) - corrigidas se necessário
+    """
+    if not emission or not due:
+        return emission, due
+    
+    d_emission = _parse_date_for_sanitize(emission)
+    d_due = _parse_date_for_sanitize(due)
+    
+    if d_emission and d_due:
+        # Se Vencimento < Emissão, provável inversão
+        if d_due < d_emission:
+            logger.warning(
+                f"Inversão Temporal detectada: Emissão {emission} > Vencimento {due}. "
+                f"Corrigindo automaticamente."
+            )
+            return due, emission  # Troca as datas
+    
+    return emission, due
+
+
 class ChecksumValidators:
     """
     Validadores de dígitos verificadores para documentos brasileiros.
