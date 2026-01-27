@@ -3,7 +3,7 @@ torch==2.2.2+cpu
 torchvision==0.17.2+cpu
 pymupdf>=1.23.0
 Pillow>=9.0.0
-paddlepaddle==2.6.2
+paddlepaddle==2.6.1
 paddleocr>=2.7.0,<2.8.0
 protobuf==3.20.2
 rapidfuzz>=3.0.0

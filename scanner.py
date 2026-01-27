@@ -44,7 +44,7 @@ from database import (
     KNOWN_CPFS
 )
 
-# Importa Core Logic (SRDA-Rural 2.0)
+# Import Core Logic (SRDA-Rural 2.0)
 from srda_rural_core import OCRSanitizer, FinancialRegexRegistry, DocumentProcessor
 
 # Importa o EnsembleExtractor para extracao avancada (OCR, GLiNER, etc)
@@ -186,10 +186,7 @@ SCHEDULING_KEYWORDS = [
 REGEX_PATTERNS = {
     # Valor monetario brasileiro COM PREFIXO (ex: R$ 3.300,00 ou Total: 1.740,00)
     # MELHORIA: Captura R$ com espaços opcionais e formatos variados de milhar
-    "amount": re.compile(
-        r'(?:R\$|Total|Valor|VALOR|Pagar|PAGAR|Líquido|LIQUIDO)\s*[:\.]?\s*(\d{1,3}(?:\.\d{3})*,\d{2})',
-        re.IGNORECASE
-    ),
+    "amount": FinancialRegexRegistry.PATTERN_BRL_VALUE,
     
     # Valor alternativo sem prefixo (busca valores grandes)
     # MELHORIA: Exige contexto mínimo de formatação (X.XXX,XX) para evitar pegar telefones/CEPs
@@ -715,12 +712,22 @@ class CognitiveScanner:
 
         # 0. CONSTANTES & HINTS (Battle Plan Step 102-104)
         hints = self._extract_hints_from_filename(file_path.name)
-        if hints['date']: result['due_date'] = hints['date']
+        if hints['date']: 
+            result['due_date'] = hints['date']
+            # Hinting é a verdade absoluta inicial
+            # Mas vamos deixar o confidence baixo por enquanto, ou setar metodo
+            result['method'] = "FILENAME_HINT"
+            
         if hints['supplier']: result['supplier_name'] = hints['supplier']
         if hints['entity']: 
             from database import EntityTag
             if hints['entity'] == 'VG': result['entity_tag'] = EntityTag.VG
             elif hints['entity'] == 'MV': result['entity_tag'] = EntityTag.MV
+
+        # HINTING PRIORITY CHECK:
+        # Se temos hints fortes, já começamos com 'confidence' alto para evitar sobrescrita ruim
+        if result['due_date'] and result['supplier_name']:
+             result['confidence'] = 1.0  # Trust the human label!
 
         try:
             # --- PATH 1: DIGITAL (Rápido) ---
@@ -731,18 +738,20 @@ class CognitiveScanner:
                 spatial_results = spatial.extract_all()
                 
                 # Consolidar resultados
-                if 'amount' in spatial_results:
+                if 'amount' in spatial_results and not result['amount_cents']:
                     val_str = spatial_results['amount'].value
                     result['amount_cents'] = SRDADatabase.amount_to_cents(val_str)
-                    result['confidence'] = spatial_results['amount'].confidence
+                    # Only update confidence if we actually used the spatial result
+                    if result['confidence'] < spatial_results['amount'].confidence:
+                        result['confidence'] = spatial_results['amount'].confidence
                 
-                if 'due_date' in spatial_results:
+                if 'due_date' in spatial_results and not result['due_date']:
                     result['due_date'] = self._parse_date(spatial_results['due_date'].value)
                 
-                if 'emission_date' in spatial_results:
+                if 'emission_date' in spatial_results and not result['emission_date']:
                     result['emission_date'] = self._parse_date(spatial_results['emission_date'].value)
                 
-                if 'cnpj_emissor' in spatial_results:
+                if 'cnpj_emissor' in spatial_results and not result['cnpj']:
                     result['cnpj'] = spatial_results['cnpj_emissor'].value
                 
                 result['extraction_path'] = "digital_spatial"
@@ -791,19 +800,19 @@ class CognitiveScanner:
             if ocr_text:
                 # Extração Regex sobre OCR
                 amt = self.extract_amount(ocr_text)
-                if amt > 0:
+                if amt > 0 and result['amount_cents'] == 0:
                     result['amount_cents'] = amt
-                    result['confidence'] = 0.7
+                    if result['confidence'] < 0.7: result['confidence'] = 0.7
                 
                 dd = self.extract_due_date(ocr_text)
-                if dd: result['due_date'] = dd
+                if dd and not result['due_date']: result['due_date'] = dd
                 
                 ed = self.extract_emission_date(ocr_text)
-                if ed: result['emission_date'] = ed
+                if ed and not result['emission_date']: result['emission_date'] = ed
                 
                 # CNPJ via Regex
                 cnpj_match = REGEX_PATTERNS["cnpj"].search(ocr_text)
-                if cnpj_match:
+                if cnpj_match and not result['cnpj']:
                     result['cnpj'] = cnpj_match.group(1)
                 
                 # Se a confiança for aceitável, PARE AQUI.
