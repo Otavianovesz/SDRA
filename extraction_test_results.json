@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "test_date": "2026-01-26T21:03:04.973356",
+    "test_date": "2026-01-27T09:40:40.657668",
     "folder_path": "11.2025_NOVEMBRO_1.547",
-    "total_files_tested": 50,
-    "log_file": "extraction_test_log_20260126_210233.txt"
+    "total_files_tested": 2568,
+    "log_file": "extraction_test_log_20260127_094011.txt"
   },
   "statistics": {
-    "total_files": 50,
+    "total_files": 2568,
     "passed": 4,
     "failed": 6,
     "errors": 0,
@@ -66,12 +66,12 @@
         "match_rate": 0.0
       }
     },
-    "total_time_ms": 31493,
-    "avg_time_ms": 629.86,
-    "pass_rate": 8.0,
-    "fail_rate": 12.0,
-    "total_execution_time_seconds": 31.49819803237915,
-    "end_time": "2026-01-26T21:03:04.973356"
+    "total_time_ms": 27846,
+    "avg_time_ms": 10.843457943925234,
+    "pass_rate": 0.1557632398753894,
+    "fail_rate": 0.23364485981308408,
+    "total_execution_time_seconds": 27.852606773376465,
+    "end_time": "2026-01-27T09:40:40.657668"
   },
   "results": [
     {
@@ -80,7 +80,7 @@
       "file_size": 22697,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 1387,
+      "total_test_time_ms": 172,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -106,7 +106,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 1386,
+        "extraction_time_ms": 170,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -151,7 +151,7 @@
       "file_size": 59215,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 215,
+      "total_test_time_ms": 190,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
       ],
@@ -179,7 +179,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 215,
+        "extraction_time_ms": 189,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -224,7 +224,7 @@
       "file_size": 31043,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 193,
+      "total_test_time_ms": 160,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -250,7 +250,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 191,
+        "extraction_time_ms": 159,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -295,7 +295,7 @@
       "file_size": 40573,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 200,
+      "total_test_time_ms": 173,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
       ],
@@ -323,7 +323,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 199,
+        "extraction_time_ms": 172,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -368,7 +368,7 @@
       "file_size": 31088,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 195,
+      "total_test_time_ms": 164,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -394,7 +394,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 194,
+        "extraction_time_ms": 164,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -439,7 +439,7 @@
       "file_size": 40736,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 194,
+      "total_test_time_ms": 166,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
       ],
@@ -467,7 +467,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 194,
+        "extraction_time_ms": 165,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -512,7 +512,7 @@
       "file_size": 91857,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 194,
+      "total_test_time_ms": 153,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -538,7 +538,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 194,
+        "extraction_time_ms": 152,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -583,7 +583,7 @@
       "file_size": 100402,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 27906,
+      "total_test_time_ms": 25463,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
       ],
@@ -612,7 +612,7 @@
         "doc_number": null,
         "due_date": null,
         "confidence": 0.0,
-        "extraction_time_ms": 27905,
+        "extraction_time_ms": 25463,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -657,7 +657,7 @@
       "file_size": 103450,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 511,
+      "total_test_time_ms": 610,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98"
       ],
@@ -685,7 +685,7 @@
         "doc_number": null,
         "due_date": "2025-09-02",
         "confidence": 0.9999999999999999,
-        "extraction_time_ms": 510,
+        "extraction_time_ms": 609,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -730,7 +730,7 @@
       "file_size": 109419,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 498,
+      "total_test_time_ms": 595,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19"
       ],
@@ -758,7 +758,7 @@
         "doc_number": null,
         "due_date": "2025-11-03",
         "confidence": 1.0,
-        "extraction_time_ms": 498,
+        "extraction_time_ms": 594,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -805,7 +805,7 @@
       "file_size": 59215,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 215,
+      "total_test_time_ms": 190,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
       ],
@@ -833,7 +833,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 215,
+        "extraction_time_ms": 189,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -878,7 +878,7 @@
       "file_size": 40573,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 200,
+      "total_test_time_ms": 173,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
       ],
@@ -906,7 +906,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 199,
+        "extraction_time_ms": 172,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -951,7 +951,7 @@
       "file_size": 40736,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 194,
+      "total_test_time_ms": 166,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
       ],
@@ -979,7 +979,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 194,
+        "extraction_time_ms": 165,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -1024,7 +1024,7 @@
       "file_size": 100402,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 27906,
+      "total_test_time_ms": 25463,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
       ],
@@ -1053,7 +1053,7 @@
         "doc_number": null,
         "due_date": null,
         "confidence": 0.0,
-        "extraction_time_ms": 27905,
+        "extraction_time_ms": 25463,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -1098,7 +1098,7 @@
       "file_size": 103450,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 511,
+      "total_test_time_ms": 610,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98"
       ],
@@ -1126,7 +1126,7 @@
         "doc_number": null,
         "due_date": "2025-09-02",
         "confidence": 0.9999999999999999,
-        "extraction_time_ms": 510,
+        "extraction_time_ms": 609,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -1171,7 +1171,7 @@
       "file_size": 109419,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 498,
+      "total_test_time_ms": 595,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19"
       ],
@@ -1199,7 +1199,7 @@
         "doc_number": null,
         "due_date": "2025-11-03",
         "confidence": 1.0,
-        "extraction_time_ms": 498,
+        "extraction_time_ms": 594,
         "extraction_method": "unknown",
         "extraction_success": true
       },

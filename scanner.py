@@ -374,12 +374,12 @@ class CognitiveScanner:
                 if date_match:
                     hints['date'] = f"{date_match.group(3)}-{date_match.group(2)}-{date_match.group(1)}"
                 
-                # Entidade
-                if parts[1].upper() in ['VG', 'MV']:
-                    hints['entity'] = parts[1].upper()
-                    
-                # Fornecedor
-                hints['supplier'] = parts[2].strip()
+                    # Entidade (Só confia se tiver data válida antes)
+                    if parts[1].upper() in ['VG', 'MV']:
+                        hints['entity'] = parts[1].upper()
+                        
+                    # Fornecedor (Só confia se tiver data válida antes)
+                    hints['supplier'] = parts[2].strip()
         except Exception:
             pass
         return hints
@@ -756,8 +756,9 @@ class CognitiveScanner:
                 
                 result['extraction_path'] = "digital_spatial"
                 
-                # Se confiança alta e valor encontrado, retorna (Fast Path Success)
-                if result['confidence'] > 0.85 and result['amount_cents'] > 0:
+                # Se confiança alta e valor encontrado, retorna (Fast Path Success), 
+                # MAS APENAS se tivermos o fornecedor!
+                if result['confidence'] > 0.85 and result['amount_cents'] > 0 and result['supplier_name']:
                     # Sanitiza antes de retornar
                     e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
                     result['emission_date'] = e_date
@@ -815,8 +816,8 @@ class CognitiveScanner:
                 if cnpj_match and not result['cnpj']:
                     result['cnpj'] = cnpj_match.group(1)
                 
-                # Se a confiança for aceitável, PARE AQUI.
-                if result['confidence'] >= 0.7: 
+                # Se a confiança for aceitável E TEMOS FORNECEDOR, PARE AQUI.
+                if result['confidence'] >= 0.7 and result['supplier_name']: 
                     # Sanitiza antes de retornar
                     e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
                     result['emission_date'] = e_date
@@ -825,8 +826,8 @@ class CognitiveScanner:
 
             # --- PATH 3: VLM (Florence-2 - Último Recurso) ---
             # Protegido por Try/Except específico para não crashar o loop
-            # Battle Plan Step 110: Skip if hints are good enough
-            can_skip_vlm = (hints['supplier'] and hints['date']) or (result['confidence'] >= 0.7)
+            # Battle Plan Step 110: Skip if hints are good enough OR we have full data
+            can_skip_vlm = (hints['supplier'] and hints['date']) or (result['confidence'] >= 0.7 and result['supplier_name'])
             
             if not can_skip_vlm:
                 try:
@@ -1230,7 +1231,7 @@ class CognitiveScanner:
     # HIERARCHICAL EXTRACTION (8GB RAM OPTIMIZED)
     # ==========================================================================
     
-    def hierarchical_extract(
+    def hierarchical_extract_UNUSED_DUPLICATE(
         self, 
         file_path: Path,
         page_num: int = 0,
@@ -1357,9 +1358,9 @@ class CognitiveScanner:
                 
                 result["confidence"] = min(confidence, 1.0)
                 
-                # If high confidence, we're done
-                if result["confidence"] >= 0.9:
-                    print(f"    [FAST] High confidence ({result['confidence']:.2f}), skipping OCR")
+                # If high confidence AND supplier found, we're done
+                if result["confidence"] >= 0.9 and result.get("supplier_name"):
+                    print(f"    [FAST] High confidence ({result['confidence']:.2f}) + Supplier, skipping OCR")
                     doc.close()
                     return result
             
