@@ -288,6 +288,18 @@ class SRDADatabase:
             params.append(entity.value)
         return self._fetchall_as_dict(query, params)
 
+    def update_transaction_fields(self, doc_id: int, supplier: str, amount_cents: int, 
+                                  due_date: Optional[str] = None, payment_date: Optional[str] = None):
+        """Atualiza campos principais de uma transação (edição manual)."""
+        self.connection.execute("""
+            UPDATE transacoes 
+            SET supplier_clean = ?,
+                amount_cents = ?,
+                due_date = ?,
+                payment_date = ?
+            WHERE doc_id = ?
+        """, [supplier, amount_cents, due_date, payment_date, doc_id])
+
     # --- Installment methods ---
     def insert_installment(self, nfe_id: int, seq_num: int, due_date: str, amount_cents: int) -> int:
         res = self.connection.execute("""

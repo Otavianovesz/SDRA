@@ -261,6 +261,16 @@ class SRDAApplication:
     - Hierarquia de datas com Comprovante como MASTER
     """
     
+    @staticmethod
+    def _iso_to_br(date_str: str) -> str:
+        """Helper para formatar data (YYYY-MM-DD -> DD/MM/YYYY)."""
+        if not date_str: return ""
+        try:
+            parts = date_str.split("-")
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+        except:
+            return date_str
+
     def __init__(self):
 
         # Componentes do sistema
@@ -1703,7 +1713,7 @@ class SRDAApplication:
         cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
         row = cursor.fetchone()
         if not row or not os.path.exists(row[0]):
-            Messagebox.showerror("Erro", "Arquivo nao encontrado", parent=self.root)
+            Messagebox.show_error("Erro", "Arquivo nao encontrado", parent=self.root)
             return
         
         if Messagebox.yesno("Reprocessar", "Excluir dados atuais e reprocessar?", parent=self.root) == "Yes":
@@ -1743,6 +1753,7 @@ class SRDAApplication:
     
     def _delete_document(self, doc_id: int):
         cursor = self.db.connection.cursor()
+        cursor.execute("DELETE FROM corrections_log WHERE doc_id = ?", (doc_id,))
         cursor.execute("DELETE FROM matches WHERE parent_doc_id = ? OR child_doc_id = ?", (doc_id, doc_id))
         cursor.execute("DELETE FROM duplicatas WHERE nfe_id = ? OR boleto_id = ?", (doc_id, doc_id))
         cursor.execute("DELETE FROM transacoes WHERE doc_id = ?", (doc_id,))
@@ -1762,7 +1773,7 @@ class SRDAApplication:
             try:
                 func(*args)
             except Exception as e:
-                self.root.after(0, lambda: Messagebox.showerror("Erro", str(e), parent=self.root))
+                self.root.after(0, lambda: Messagebox.show_error("Erro", str(e), parent=self.root))
             finally:
                 self.root.after(0, self._on_operation_complete)
         
@@ -1819,8 +1830,20 @@ class SRDAApplication:
         stats = self.scanner.quick_import(progress_callback=progress_callback)
         
         # Status final
-        msg = f"✅ Importado: {stats['imported']} novos | {stats['skipped']} existentes | Use 🧠 Processar para extrair dados"
+        msg = f"✅ Importado: {stats['imported']} novos | {stats['skipped']} existentes"
         self.root.after(0, lambda: self._set_status(msg))
+        
+        # Prompt for immediate processing if new files found
+        if stats['new_ids']:
+            ids_to_process = stats['new_ids']
+            if len(ids_to_process) > 0:
+                self.root.after(0, lambda: self._prompt_processing(ids_to_process))
+
+    def _prompt_processing(self, doc_ids: List[int]):
+        """Prompt user to process imported files immediately."""
+        msg = f"Importação concluída. Deseja processar (OCR/AI) os {len(doc_ids)} novos arquivos agora?"
+        if Messagebox.show_question("Processar Agora?", msg, parent=self.root) == "Yes":
+            self._run_in_thread(self._do_process_selected, doc_ids)
     
 
     def _do_match(self):

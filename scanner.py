@@ -590,6 +590,22 @@ class CognitiveScanner:
             return match.group(1).replace(" ", "")
         return None
     
+    def extract_supplier(self, text: str, doc_type_enum: DocumentType = None) -> Optional[str]:
+        """
+        Extrai fornecedor usando RegexVoter do Ensemble.
+        Delegate para lógica centralizada.
+        """
+        if self.ensemble and getattr(self.ensemble, 'regex_voter', None):
+             try:
+                 # Usa o voter
+                 res = self.ensemble.regex_voter.extract_supplier(text, doc_type_enum)
+                 if res and res.value:
+                     return res.value
+             except Exception as e:
+                 logger.debug(f"Erro ao extrair fornecedor: {e}")
+        
+        return None
+
     def extract_entity(self, text: str) -> Optional[EntityTag]:
         """
         Identifica a entidade financeira (Vagner ou Marcelli) pelo CPF.
@@ -703,7 +719,7 @@ class CognitiveScanner:
         # Resultado padrão (segurança)
         result = {
             "amount_cents": 0, "due_date": None, "emission_date": None,
-            "supplier_name": None, "cnpj": None, "entity_tag": None,
+            "supplier_name": None, "supplier_clean": None, "cnpj": None, "entity_tag": None,
             "confidence": 0.0, "doc_type": str(doc_type) if doc_type else None,
             "extraction_path": "failed", "error": None,
             "review_needed": False,
@@ -718,7 +734,9 @@ class CognitiveScanner:
             # Mas vamos deixar o confidence baixo por enquanto, ou setar metodo
             result['method'] = "FILENAME_HINT"
             
-        if hints['supplier']: result['supplier_name'] = hints['supplier']
+        if hints['supplier']: 
+            result['supplier_name'] = hints['supplier']
+            result['supplier_clean'] = hints['supplier']
         if hints['entity']: 
             from database import EntityTag
             if hints['entity'] == 'VG': result['entity_tag'] = EntityTag.VG
@@ -758,11 +776,13 @@ class CognitiveScanner:
                 
                 # Se confiança alta e valor encontrado, retorna (Fast Path Success), 
                 # MAS APENAS se tivermos o fornecedor!
-                if result['confidence'] > 0.85 and result['amount_cents'] > 0 and result['supplier_name']:
+                if result['confidence'] > 0.85 and result['amount_cents'] > 0 and (result['supplier_name'] or result['supplier_clean']):
                     # Sanitiza antes de retornar
                     e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
                     result['emission_date'] = e_date
                     result['due_date'] = d_date
+                    # Ensure both keys exist
+                    result['supplier_clean'] = result.get('supplier_clean') or result.get('supplier_name')
                     return result
 
             # --- PATH 2: OCR (Paddle - Robusto) ---
@@ -816,19 +836,37 @@ class CognitiveScanner:
                 if cnpj_match and not result['cnpj']:
                     result['cnpj'] = cnpj_match.group(1)
                 
+                # --- FIX: Explicitly Extract Supplier from OCR Text ---
+                if not result['supplier_name']:
+                    # Tenta inferir doc_type para ajudar
+                    doc_type_enum = result.get('doc_type_enum')
+                    
+                    supp = self.extract_supplier(ocr_text, doc_type_enum)
+                    if supp:
+                        result['supplier_name'] = supp
+                        # Se achou fornecedor no OCR, aumenta confiança
+                        if result['confidence'] < 0.8: result['confidence'] = 0.8
+                
                 # Se a confiança for aceitável E TEMOS FORNECEDOR, PARE AQUI.
-                if result['confidence'] >= 0.7 and result['supplier_name']: 
+                if result['confidence'] >= 0.7 and (result['supplier_name'] or result['supplier_clean']) and result['amount_cents'] > 0: 
                     # Sanitiza antes de retornar
                     e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
                     result['emission_date'] = e_date
                     result['due_date'] = d_date
+                    # Ensure both keys exist
+                    result['supplier_clean'] = result.get('supplier_clean') or result.get('supplier_name')
                     return result
 
             # --- PATH 3: VLM (Florence-2 - Último Recurso) ---
             # Protegido por Try/Except específico para não crashar o loop
-            # Battle Plan Step 110: Skip if hints are good enough OR we have full data
-            can_skip_vlm = (hints['supplier'] and hints['date']) or (result['confidence'] >= 0.7 and result['supplier_name'])
+            # Battle Plan Step 110: Skip if hints are good enough AND we found an amount
+            can_skip_vlm = (hints['supplier'] and hints['date'] and result['amount_cents'] > 0) or \
+                          (result['confidence'] >= 0.7 and (result['supplier_name'] or result['supplier_clean']) and result['amount_cents'] > 0)
             
+            print(f"DEBUG: VLM Skip Check. HintsSup={hints['supplier']}, HintsDate={hints['date']}")
+            print(f"DEBUG: Conf={result['confidence']}, SupName={result['supplier_name']}, Amt={result['amount_cents']}")
+            print(f"DEBUG: can_skip_vlm={can_skip_vlm}")
+
             if not can_skip_vlm:
                 try:
                     # Só carrega se realmente necessário
@@ -848,6 +886,13 @@ class CognitiveScanner:
                             result['amount_cents'] = amt_vlm
                             result['confidence'] = 0.6  # Confiança menor pois é expensive
                             result['extraction_path'] = "vlm_florence"
+                        
+                        # Tenta extrair fornecedor do VLM também
+                        if not result['supplier_name']:
+                            supp_vlm = self.extract_supplier(vlm_text)
+                            if supp_vlm:
+                                result['supplier_name'] = supp_vlm
+                                result['confidence'] = 0.85 # VLM + Regex é forte
                         
                         if not result['due_date']:
                             result['due_date'] = self.extract_due_date(vlm_text)
@@ -897,6 +942,7 @@ class CognitiveScanner:
             # Aplica resultado da validação
             if val_res['status'] != "REJECTED":
                 result['supplier_name'] = val_res['final_name']
+                result['supplier_clean'] = val_res['final_name']
                 result['cnpj'] = val_res['final_cnpj']
                 result['method'] = val_res['method']
                 result['review_needed'] = val_res.get('review_needed', False)
@@ -907,6 +953,8 @@ class CognitiveScanner:
                  # Rejeitado ou não encontrado. Mantém o que tem mas marca review.
                  if not result['supplier_name']:
                      result['supplier_name'] = candidate_name # Mantem original se não validou
+                 
+                 result['supplier_clean'] = result['supplier_name']
                  result['review_needed'] = True
         
         return result
@@ -1922,8 +1970,9 @@ class CognitiveScanner:
         """
         Importa PDFs rapidamente SEM processamento de AI.
         Apenas registra arquivos no banco com status PENDING.
+        Returns: Dict com stats e lista 'new_ids'
         """
-        stats = {"total_files": 0, "imported": 0, "skipped": 0, "errors": 0}
+        stats = {"total_files": 0, "imported": 0, "skipped": 0, "errors": 0, "new_ids": []}
         
         files = list(self.scan_directory())
         stats["total_files"] = len(files)
@@ -1949,11 +1998,17 @@ class CognitiveScanner:
                 
                 # Apenas registra - SEM processar AI
                 cursor = self.db.connection.cursor()
-                cursor.execute("""
+                # DuckDB uses RETURNING id to get the inserted ID
+                res = cursor.execute("""
                     INSERT INTO documentos 
                     (original_path, file_hash, doc_type, status, page_start, page_end)
-                    VALUES (?, ?, 'UNKNOWN', 'PENDING', 1, 1)
-                """, (str(file_path), file_hash))
+                    VALUES (?, ?, 'UNKNOWN', 'PENDING', 1, 1) RETURNING id
+                """, (str(file_path), file_hash)).fetchone()
+                
+                if res:
+                    new_id = res[0]
+                    stats["new_ids"].append(new_id)
+                
                 self.db.connection.commit()
                 
                 stats["imported"] += 1
@@ -1962,6 +2017,7 @@ class CognitiveScanner:
                     
             except Exception as e:
                 stats["errors"] += 1
+                logger.error(f"Erro ao importar {filename}: {e}")
                 if progress_callback:
                     progress_callback(i, stats["total_files"], filename, "erro")
         
