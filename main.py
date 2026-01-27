@@ -1174,6 +1174,11 @@ class SRDAApplication:
         self.btn_rename = ttk.Button(btn_frame, text="📋 Renomear", bootstyle="warning-outline", width=11, command=self._on_rename_click)
         self.btn_rename.pack(side=LEFT, padx=3)
         
+        # Novo botão: Sincronizar Gmail (Project Cyborg)
+        self.btn_gmail_sync = ttk.Button(btn_frame, text="📧 Gmail", bootstyle="info", width=8, command=self._on_gmail_sync_click)
+        self.btn_gmail_sync.pack(side=LEFT, padx=3)
+        ToolTip(self.btn_gmail_sync, text="Sincroniza e-mails do Gmail (Project Cyborg)")
+        
         self.btn_refresh = ttk.Button(btn_frame, text="↻", bootstyle="secondary", width=3, command=self._refresh_all)
         self.btn_refresh.pack(side=LEFT, padx=3)
     
@@ -1326,7 +1331,7 @@ class SRDAApplication:
         self.lbl_email_stats.pack(side=RIGHT, padx=10)
         
         # Log console
-        log_frame = ttk.LabelFrame(self.email_tab, text="Console de Log", padding=5)
+        log_frame = ttk.Labelframe(self.email_tab, text="Console de Log", padding=5)
         log_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
         
         # Text widget with scrollbar
@@ -1459,7 +1464,22 @@ class SRDAApplication:
         finally:
             self.root.after(0, lambda: self.btn_start_email.config(state=NORMAL))
             self.root.after(0, lambda: self.btn_stop_email.config(state=DISABLED))
-
+    
+    def _on_gmail_sync_click(self):
+        """Handle Gmail sync button click from main toolbar."""
+        # Switch to Email Monitor tab if not already there
+        try:
+            # Find the email tab and select it
+            for tab_id in self.notebook.tabs():
+                tab_text = self.notebook.tab(tab_id, 'text')
+                if 'Email' in tab_text or '📧' in tab_text:
+                    self.notebook.select(tab_id)
+                    break
+        except Exception as e:
+            logger.warning(f"Could not switch to email tab: {e}")
+        
+        # Start the email pipeline
+        self._on_start_email_monitor()
     
     def _build_status_bar(self):
         status_bar = ttk.Frame(self.main_container)

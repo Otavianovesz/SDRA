@@ -390,7 +390,10 @@ class EmailPipeline:
         """
         Process email by finding and downloading from links.
         
-        Uses Playwright for JavaScript-heavy pages.
+        Uses multilevel approach:
+        1. Try BeautifulSoup link extraction (fast)
+        2. If no links found, ask Gemini to identify URLs (aggressive)
+        3. Download with Playwright for JavaScript-heavy pages
         """
         result = EmailProcessingResult(
             email_id=email.id,
@@ -398,8 +401,13 @@ class EmailPipeline:
             status=ProcessingStatus.PROCESSING
         )
         
-        # Extract candidate links
+        # Level 1: Extract candidate links with BeautifulSoup
         links = self.link_extractor.extract_links(email.html_body)
+        
+        # Level 2: If no links found, use Gemini to identify URLs (AGGRESSIVE HUNT)
+        if not links and self.use_cloud_ai:
+            self._log_progress("    → Sem links detectados. Consultando Gemini...")
+            links = self._gemini_hunt_links(email.html_body or email.text_body)
         
         if not links:
             result.status = ProcessingStatus.SKIPPED
@@ -409,10 +417,12 @@ class EmailPipeline:
         # Try top 3 links
         for link in links[:3]:
             try:
-                self._log_progress(f"    → Baixando: {link.text[:30]}...")
+                link_url = getattr(link, 'url', link) if hasattr(link, 'url') else link
+                link_text = getattr(link, 'text', link_url[:30]) if hasattr(link, 'text') else str(link_url)[:30]
+                self._log_progress(f"    → Baixando: {link_text}...")
                 
                 from integrations.link_extractor import download_link_sync
-                downloaded = download_link_sync(link.url)
+                downloaded = download_link_sync(link_url)
                 
                 if downloaded and downloaded.exists():
                     # Process downloaded file
@@ -432,6 +442,66 @@ class EmailPipeline:
             result.error_message = "No documents extracted from links"
         
         return result
+    
+    def _gemini_hunt_links(self, content: str) -> List[str]:
+        """
+        Use Gemini AI to find download URLs in email content.
+        
+        Aggressive hunt mode - the AI reads the entire email and 
+        identifies any links that might lead to boletos or invoices.
+        """
+        if not content:
+            return []
+        
+        try:
+            from voters.gemini_voter import get_gemini_voter
+            voter = get_gemini_voter()
+            
+            if not voter.is_available():
+                return []
+            
+            # Specific prompt for link hunting
+            prompt = f"""Analise este conteúdo de e-mail e identifique URLs que provavelmente levam a boletos, 
+notas fiscais ou documentos financeiros para download.
+
+Conteúdo do E-mail:
+---
+{content[:8000]}
+---
+
+Retorne APENAS um JSON válido no formato:
+{{"urls": ["url1", "url2"]}}
+
+Se não houver nenhuma URL relevante, retorne:
+{{"urls": []}}
+
+IMPORTANTE: Retorne APENAS o JSON, sem explicações."""
+
+            import google.generativeai as genai
+            import json
+            
+            # Use direct text generation (cheaper)
+            result = voter._get_model(voter.default_model).generate_content(prompt)
+            
+            if result and result.text:
+                # Parse JSON response
+                import re
+                cleaned = result.text.strip()
+                if cleaned.startswith('```'):
+                    cleaned = re.sub(r'^```\\w*\\n?', '', cleaned)
+                    cleaned = re.sub(r'\\n?```$', '', cleaned)
+                
+                data = json.loads(cleaned)
+                urls = data.get('urls', [])
+                
+                if urls:
+                    logger.info(f"[GEMINI LINK HUNTER] Encontradas {len(urls)} URLs")
+                return urls
+                
+        except Exception as e:
+            logger.warning(f"Gemini link hunting failed: {e}")
+        
+        return []
     
     def _process_text_path(self, email) -> EmailProcessingResult:
         """

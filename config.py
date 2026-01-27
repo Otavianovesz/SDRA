@@ -8,6 +8,13 @@ Contains all hard limits, paths, and environment settings.
 import os
 from pathlib import Path
 
+# Load environment variables from .env file (secure API key storage)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, rely on system env vars
+
 # =============================================================================
 # HARDWARE LIMITS
 # =============================================================================

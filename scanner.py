@@ -360,6 +360,28 @@ class CognitiveScanner:
         db_conn = self.db.connection if self.db else None
         known_suppliers = load_known_suppliers_full(db_conn)
         self.processor = DocumentProcessor(known_suppliers)
+        
+        # Gemini Voter (lazy load - só carrega quando necessário)
+        self._gemini_voter = None
+        self._use_cloud_ai = True  # Flag para habilitar fallback IA
+    
+    @property
+    def gemini_voter(self):
+        """Lazy load Gemini voter (Oráculo Cloud)."""
+        if self._gemini_voter is None and self._use_cloud_ai:
+            try:
+                from voters.gemini_voter import get_gemini_voter, GeminiVoter
+                voter = get_gemini_voter()
+                if voter.is_available():
+                    self._gemini_voter = voter
+                    logger.info("[GEMINI] Voter inicializado para fallback automático")
+                else:
+                    logger.warning("[GEMINI] API não configurada - fallback desabilitado")
+            except ImportError:
+                logger.warning("[GEMINI] Módulo não disponível")
+            except Exception as e:
+                logger.error(f"[GEMINI] Erro ao inicializar: {e}")
+        return self._gemini_voter
     
     @staticmethod
     def is_text_junk(text: str) -> bool:
@@ -861,6 +883,66 @@ class CognitiveScanner:
                         if not result['supplier_name']: result['supplier_name'] = self.extract_supplier(v_text)
                 except Exception as e:
                     logger.error(f"Falha crítica no VLM: {e}")
+
+            # --- PATH 4: GEMINI (O ORÁCULO - ÚLTIMA INSTÂNCIA) ---
+            # Acionado automaticamente quando:
+            # 1. Valor não foi encontrado (crítico)
+            # 2. Confiança muito baixa (<0.85)
+            # 3. Fornecedor não identificado
+            CONFIDENCE_THRESHOLD = 0.85
+            
+            needs_gemini = (
+                result['amount_cents'] == 0 or 
+                result['confidence'] < CONFIDENCE_THRESHOLD or
+                not result['supplier_name']
+            )
+            
+            if needs_gemini and self.gemini_voter:
+                try:
+                    logger.info(f"[GEMINI] Acionando IA para {file_path.name} "
+                               f"(valor={result['amount_cents']}, conf={result['confidence']:.2f}, "
+                               f"fornecedor={result['supplier_name']})")
+                    
+                    gemini_res = self.gemini_voter.extract(str(file_path))
+                    
+                    if gemini_res.success:
+                        g_data = gemini_res.data
+                        
+                        # Valor (se Gemini retornou e local falhou)
+                        g_amount = g_data.get('amount')
+                        if g_amount and g_amount > 0:
+                            if result['amount_cents'] == 0:
+                                result['amount_cents'] = int(round(g_amount * 100))
+                                result['confidence'] = max(result['confidence'], 0.9)
+                                result['extraction_path'] = "gemini_oracle"
+                            elif result['confidence'] < CONFIDENCE_THRESHOLD:
+                                # Usa Gemini como árbitro se local teve baixa confiança
+                                result['amount_cents'] = int(round(g_amount * 100))
+                                result['confidence'] = 0.92
+                                result['extraction_path'] = "gemini_arbitration"
+                        
+                        # Fornecedor
+                        if not result['supplier_name'] and g_data.get('supplier_name'):
+                            result['supplier_name'] = g_data['supplier_name']
+                        
+                        # CNPJ
+                        if not result['cnpj'] and g_data.get('supplier_doc'):
+                            result['cnpj'] = g_data['supplier_doc']
+                        
+                        # Datas
+                        if not result['due_date'] and g_data.get('due_date'):
+                            result['due_date'] = g_data['due_date']
+                        if not result['emission_date'] and g_data.get('emission_date'):
+                            result['emission_date'] = g_data['emission_date']
+                        
+                        result['method'] = "GEMINI_FALLBACK"
+                        logger.info(f"[GEMINI] Extração OK: valor={result['amount_cents']}, "
+                                   f"fornecedor={result['supplier_name']}")
+                    else:
+                        logger.warning(f"[GEMINI] Falhou: {gemini_res.error}")
+                        
+                except Exception as e:
+                    logger.error(f"[GEMINI] Erro na extração: {e}")
 
         except Exception as e:
             logger.critical(f"Falha catastrófica em {file_path.name}: {e}")
