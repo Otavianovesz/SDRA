@@ -1,0 +1,343 @@
+2026-01-26 12:27:54,458 - INFO - Iniciando teste em: 11.2025_NOVEMBRO_1.547
+2026-01-26 12:27:54,458 - INFO - Limite de arquivos: Sem limite
+2026-01-26 12:27:54,458 - INFO - Saída JSON: extraction_test_results.json
+2026-01-26 12:27:54,472 - INFO - 
+######################################################################
+2026-01-26 12:27:54,473 - INFO - # TESTE COMPLETO DE EXTRAÇÃO SRDA-Rural
+2026-01-26 12:27:54,473 - INFO - # Pasta: 11.2025_NOVEMBRO_1.547
+2026-01-26 12:27:54,473 - INFO - # Total de arquivos: 2568
+2026-01-26 12:27:54,473 - INFO - # Início: 2026-01-26T12:27:54.473142
+2026-01-26 12:27:54,473 - INFO - ######################################################################
+
+2026-01-26 12:27:54,473 - INFO - 
+[1/2568] Processando: 01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf
+2026-01-26 12:27:54,473 - INFO - 
+============================================================
+2026-01-26 12:27:54,473 - INFO - TESTANDO: 01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf
+2026-01-26 12:27:54,473 - INFO - ============================================================
+2026-01-26 12:27:54,473 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:54,473 - DEBUG - Parsed '01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf':
+2026-01-26 12:27:54,473 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:54,473 - DEBUG -   Entidade: MV
+2026-01-26 12:27:54,473 - DEBUG -   Fornecedor: CADORE BIDOIA
+2026-01-26 12:27:54,473 - DEBUG -   Valor: 3.108,00 (310800 cents)
+2026-01-26 12:27:54,473 - DEBUG -   Tipo: BOLETO
+2026-01-26 12:27:54,473 - DEBUG -   Número: FECHAMENTO
+2026-01-26 12:27:54,473 - DEBUG -   Parcela: None
+2026-01-26 12:27:54,473 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,039 - ERROR - Erro na extração de '01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,040 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,040 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,040 - INFO - 
+[2/2568] Processando: 01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf
+2026-01-26 12:27:58,040 - INFO - 
+============================================================
+2026-01-26 12:27:58,040 - INFO - TESTANDO: 01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf
+2026-01-26 12:27:58,040 - INFO - ============================================================
+2026-01-26 12:27:58,040 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,040 - DEBUG - Parsed '01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf':
+2026-01-26 12:27:58,040 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,040 - DEBUG -   Entidade: MV
+2026-01-26 12:27:58,040 - DEBUG -   Fornecedor: CADORE BIDOIA
+2026-01-26 12:27:58,040 - DEBUG -   Valor: 850,00 (85000 cents)
+2026-01-26 12:27:58,040 - DEBUG -   Tipo: NFE
+2026-01-26 12:27:58,040 - DEBUG -   Número: 732177
+2026-01-26 12:27:58,040 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,040 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,041 - ERROR - Erro na extração de '01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,042 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,042 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,042 - INFO - 
+[3/2568] Processando: 01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF
+2026-01-26 12:27:58,042 - INFO - 
+============================================================
+2026-01-26 12:27:58,042 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF
+2026-01-26 12:27:58,042 - INFO - ============================================================
+2026-01-26 12:27:58,042 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,042 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF':
+2026-01-26 12:27:58,042 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,042 - DEBUG -   Entidade: MV
+2026-01-26 12:27:58,042 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-26 12:27:58,042 - DEBUG -   Valor: 270,00 (27000 cents)
+2026-01-26 12:27:58,042 - DEBUG -   Tipo: BOLETO
+2026-01-26 12:27:58,042 - DEBUG -   Número: 111534
+2026-01-26 12:27:58,042 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,042 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,043 - ERROR - Erro na extração de '01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,043 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,043 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,043 - INFO - 
+[4/2568] Processando: 01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf
+2026-01-26 12:27:58,043 - INFO - 
+============================================================
+2026-01-26 12:27:58,043 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf
+2026-01-26 12:27:58,044 - INFO - ============================================================
+2026-01-26 12:27:58,044 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,044 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf':
+2026-01-26 12:27:58,044 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,044 - DEBUG -   Entidade: MV
+2026-01-26 12:27:58,044 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-26 12:27:58,044 - DEBUG -   Valor: 270,00 (27000 cents)
+2026-01-26 12:27:58,044 - DEBUG -   Tipo: NFE
+2026-01-26 12:27:58,044 - DEBUG -   Número: 111534
+2026-01-26 12:27:58,044 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,044 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,044 - ERROR - Erro na extração de '01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,045 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,045 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,045 - INFO - 
+[5/2568] Processando: 01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF
+2026-01-26 12:27:58,045 - INFO - 
+============================================================
+2026-01-26 12:27:58,045 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF
+2026-01-26 12:27:58,045 - INFO - ============================================================
+2026-01-26 12:27:58,045 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,045 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF':
+2026-01-26 12:27:58,045 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,045 - DEBUG -   Entidade: MV
+2026-01-26 12:27:58,045 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-26 12:27:58,045 - DEBUG -   Valor: 81,00 (8100 cents)
+2026-01-26 12:27:58,045 - DEBUG -   Tipo: BOLETO
+2026-01-26 12:27:58,045 - DEBUG -   Número: 111535
+2026-01-26 12:27:58,045 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,045 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,046 - ERROR - Erro na extração de '01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,046 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,046 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,047 - INFO - 
+[6/2568] Processando: 01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf
+2026-01-26 12:27:58,047 - INFO - 
+============================================================
+2026-01-26 12:27:58,047 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf
+2026-01-26 12:27:58,047 - INFO - ============================================================
+2026-01-26 12:27:58,047 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,047 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf':
+2026-01-26 12:27:58,047 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,047 - DEBUG -   Entidade: MV
+2026-01-26 12:27:58,047 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-26 12:27:58,047 - DEBUG -   Valor: 81,00 (8100 cents)
+2026-01-26 12:27:58,047 - DEBUG -   Tipo: NFE
+2026-01-26 12:27:58,047 - DEBUG -   Número: 111535
+2026-01-26 12:27:58,047 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,047 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,047 - ERROR - Erro na extração de '01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,048 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,048 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,048 - INFO - 
+[7/2568] Processando: 01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf
+2026-01-26 12:27:58,048 - INFO - 
+============================================================
+2026-01-26 12:27:58,048 - INFO - TESTANDO: 01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf
+2026-01-26 12:27:58,048 - INFO - ============================================================
+2026-01-26 12:27:58,048 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,048 - DEBUG - Parsed '01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf':
+2026-01-26 12:27:58,048 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,048 - DEBUG -   Entidade: VG
+2026-01-26 12:27:58,048 - DEBUG -   Fornecedor: ABDALLA TRUCK
+2026-01-26 12:27:58,048 - DEBUG -   Valor: 370,00 (37000 cents)
+2026-01-26 12:27:58,048 - DEBUG -   Tipo: BOLETO
+2026-01-26 12:27:58,048 - DEBUG -   Número: 20590
+2026-01-26 12:27:58,048 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,048 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,049 - ERROR - Erro na extração de '01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,049 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,049 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,049 - INFO - 
+[8/2568] Processando: 01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf
+2026-01-26 12:27:58,049 - INFO - 
+============================================================
+2026-01-26 12:27:58,049 - INFO - TESTANDO: 01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf
+2026-01-26 12:27:58,049 - INFO - ============================================================
+2026-01-26 12:27:58,049 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,050 - DEBUG - Parsed '01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf':
+2026-01-26 12:27:58,050 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,050 - DEBUG -   Entidade: VG
+2026-01-26 12:27:58,050 - DEBUG -   Fornecedor: ABDALLA TRUCK
+2026-01-26 12:27:58,050 - DEBUG -   Valor: 370,00 (37000 cents)
+2026-01-26 12:27:58,050 - DEBUG -   Tipo: NFSE
+2026-01-26 12:27:58,050 - DEBUG -   Número: 20590
+2026-01-26 12:27:58,050 - DEBUG -   Parcela: None
+2026-01-26 12:27:58,050 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,050 - ERROR - Erro na extração de '01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,051 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,051 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,051 - INFO - 
+[9/2568] Processando: 01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-26 12:27:58,051 - INFO - 
+============================================================
+2026-01-26 12:27:58,051 - INFO - TESTANDO: 01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-26 12:27:58,051 - INFO - ============================================================
+2026-01-26 12:27:58,051 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,051 - DEBUG - Parsed '01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf':
+2026-01-26 12:27:58,051 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,051 - DEBUG -   Entidade: VG
+2026-01-26 12:27:58,051 - DEBUG -   Fornecedor: AGRO BAGGIO
+2026-01-26 12:27:58,051 - DEBUG -   Valor: 2.843,29 (284329 cents)
+2026-01-26 12:27:58,051 - DEBUG -   Tipo: NFE
+2026-01-26 12:27:58,051 - DEBUG -   Número: 414978
+2026-01-26 12:27:58,051 - DEBUG -   Parcela: 2-2
+2026-01-26 12:27:58,051 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,052 - ERROR - Erro na extração de '01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,052 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,052 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,052 - INFO - 
+[10/2568] Processando: 01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-26 12:27:58,053 - INFO - 
+============================================================
+2026-01-26 12:27:58,053 - INFO - TESTANDO: 01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-26 12:27:58,053 - INFO - ============================================================
+2026-01-26 12:27:58,053 - INFO - Parseando nome do arquivo...
+2026-01-26 12:27:58,053 - DEBUG - Parsed '01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf':
+2026-01-26 12:27:58,053 - DEBUG -   Data: 01.11.2025
+2026-01-26 12:27:58,053 - DEBUG -   Entidade: VG
+2026-01-26 12:27:58,053 - DEBUG -   Fornecedor: AGRO BAGGIO
+2026-01-26 12:27:58,053 - DEBUG -   Valor: 2.843,29 (284329 cents)
+2026-01-26 12:27:58,053 - DEBUG -   Tipo: BOLETO
+2026-01-26 12:27:58,053 - DEBUG -   Número: 414978
+2026-01-26 12:27:58,053 - DEBUG -   Parcela: 2-2
+2026-01-26 12:27:58,053 - INFO - Extraindo dados do documento...
+2026-01-26 12:27:58,053 - ERROR - Erro na extração de '01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf': cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,054 - ERROR - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\test_complete_extraction.py", line 309, in extract_document
+    from scanner import CognitiveScanner
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\scanner.py", line 27, in <module>
+    from resource_manager import get_resource_manager, get_model_manager
+ImportError: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+
+2026-01-26 12:27:58,054 - ERROR - Extração falhou: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,054 - INFO - SMOKE TEST: Limite de 10 arquivos atingido. Parando.
+2026-01-26 12:27:58,054 - INFO - 
+######################################################################
+2026-01-26 12:27:58,054 - INFO - # RESUMO DO TESTE
+2026-01-26 12:27:58,054 - INFO - ######################################################################
+2026-01-26 12:27:58,054 - INFO - 
+TOTAL DE ARQUIVOS: 2568
+2026-01-26 12:27:58,054 - INFO -   ✓ Passou:  0 (0.0%)
+2026-01-26 12:27:58,054 - INFO -   ✗ Falhou:  10 (0.4%)
+2026-01-26 12:27:58,054 - INFO -   ⚠ Erros:   0
+2026-01-26 12:27:58,054 - INFO - 
+TEMPO DE EXECUÇÃO:
+2026-01-26 12:27:58,054 - INFO -   Total:  3.6s
+2026-01-26 12:27:58,054 - INFO -   Médio:  1ms/arquivo
+2026-01-26 12:27:58,054 - INFO - 
+PRECISÃO POR CAMPO:
+2026-01-26 12:27:58,054 - INFO - 
+PRECISÃO POR TIPO DE DOCUMENTO:
+2026-01-26 12:27:58,055 - INFO -   BOLETO         :   0.0% (0/5)
+2026-01-26 12:27:58,055 - INFO -   NFE            :   0.0% (0/4)
+2026-01-26 12:27:58,055 - INFO -   NFSE           :   0.0% (0/1)
+2026-01-26 12:27:58,055 - INFO - 
+PRECISÃO POR ENTIDADE:
+2026-01-26 12:27:58,055 - INFO -   MV             :   0.0% (0/6)
+2026-01-26 12:27:58,055 - INFO -   VG             :   0.0% (0/4)
+2026-01-26 12:27:58,055 - INFO - 
+======================================================================
+2026-01-26 12:27:58,055 - INFO - TOP 20 FALHAS (de 10 total)
+2026-01-26 12:27:58,055 - INFO - ======================================================================
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 3.108,00 (310800 cents) | MV | CADORE BIDOIA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 850,00 (85000 cents) | MV | CADORE BIDOIA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 270,00 (27000 cents) | MV | SANTA CLARA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 270,00 (27000 cents) | MV | SANTA CLARA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 81,00 (8100 cents) | MV | SANTA CLARA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 81,00 (8100 cents) | MV | SANTA CLARA
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 370,00 (37000 cents) | VG | ABDALLA TRUCK
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 370,00 (37000 cents) | VG | ABDALLA TRUCK
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 2.843,29 (284329 cents) | VG | AGRO BAGGIO
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,055 - INFO - 
+01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-26 12:27:58,055 - INFO -   Ground Truth: 2.843,29 (284329 cents) | VG | AGRO BAGGIO
+2026-01-26 12:27:58,055 - INFO -   Extraído:     None cents | None | None
+2026-01-26 12:27:58,055 - INFO -   ERRO: Falha na extração: cannot import name 'get_model_manager' from 'resource_manager' (C:\Users\otavi\Documents\Projetos_programação\SDRA_2\resource_manager.py)
+2026-01-26 12:27:58,057 - INFO - 
+Resultados salvos em: extraction_test_results.json
+2026-01-26 12:27:58,057 - INFO - Log salvo em: extraction_test_log_20260126_122754.txt

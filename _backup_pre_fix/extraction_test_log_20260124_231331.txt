@@ -1,0 +1,501 @@
+2026-01-24 23:13:31,029 - INFO - Iniciando teste em: 11.2025_NOVEMBRO_1.547
+2026-01-24 23:13:31,029 - INFO - Limite de arquivos: 10
+2026-01-24 23:13:31,029 - INFO - Saída JSON: extraction_test_sample.json
+2026-01-24 23:13:31,041 - INFO - 
+######################################################################
+2026-01-24 23:13:31,041 - INFO - # TESTE COMPLETO DE EXTRAÇÃO SRDA-Rural
+2026-01-24 23:13:31,041 - INFO - # Pasta: 11.2025_NOVEMBRO_1.547
+2026-01-24 23:13:31,041 - INFO - # Total de arquivos: 10
+2026-01-24 23:13:31,041 - INFO - # Início: 2026-01-24T23:13:31.041545
+2026-01-24 23:13:31,042 - INFO - ######################################################################
+
+2026-01-24 23:13:31,042 - INFO - 
+[1/10] Processando: 01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf
+2026-01-24 23:13:31,042 - INFO - 
+============================================================
+2026-01-24 23:13:31,042 - INFO - TESTANDO: 01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf
+2026-01-24 23:13:31,042 - INFO - ============================================================
+2026-01-24 23:13:31,042 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:31,042 - DEBUG - Parsed '01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf':
+2026-01-24 23:13:31,042 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:31,042 - DEBUG -   Entidade: MV
+2026-01-24 23:13:31,042 - DEBUG -   Fornecedor: CADORE BIDOIA
+2026-01-24 23:13:31,042 - DEBUG -   Valor: 3.108,00 (310800 cents)
+2026-01-24 23:13:31,042 - DEBUG -   Tipo: BOLETO
+2026-01-24 23:13:31,042 - DEBUG -   Número: FECHAMENTO
+2026-01-24 23:13:31,042 - DEBUG -   Parcela: None
+2026-01-24 23:13:31,042 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:32,166 - INFO - PyTorch configured: CPU-only, threads=4, grad=disabled
+2026-01-24 23:13:32,224 - INFO - pyzbar available for barcode decoding
+2026-01-24 23:13:32,230 - DEBUG - DPI Normalization: 595x842 -> 612x866 (scale=1.029)
+2026-01-24 23:13:32,234 - DEBUG - PDF carregado: 347 blocos de texto
+2026-01-24 23:13:32,259 - INFO - PyTorch configured: threads=4, grad=False
+2026-01-24 23:13:32,260 - INFO - ResourceManager initialized: max RAM = 6.5GB
+2026-01-24 23:13:32,260 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:32,374 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.06GB available
+2026-01-24 23:13:32,374 - DEBUG - Extracted '01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf':
+2026-01-24 23:13:32,374 - DEBUG -   Valor: 310800 cents
+2026-01-24 23:13:32,374 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:32,374 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:32,374 - DEBUG -   Tipo: None
+2026-01-24 23:13:32,374 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:32,380 - INFO - Comparando resultados...
+2026-01-24 23:13:32,380 - INFO - OK Valor: Match exato: 3108.00
+2026-01-24 23:13:32,380 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:32,380 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:32,380 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:32,380 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:32,380 - INFO - Tempo: 1338ms
+2026-01-24 23:13:32,380 - INFO - 
+[2/10] Processando: 01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf
+2026-01-24 23:13:32,380 - INFO - 
+============================================================
+2026-01-24 23:13:32,380 - INFO - TESTANDO: 01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf
+2026-01-24 23:13:32,380 - INFO - ============================================================
+2026-01-24 23:13:32,380 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:32,381 - DEBUG - Parsed '01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf':
+2026-01-24 23:13:32,381 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:32,381 - DEBUG -   Entidade: MV
+2026-01-24 23:13:32,381 - DEBUG -   Fornecedor: CADORE BIDOIA
+2026-01-24 23:13:32,381 - DEBUG -   Valor: 850,00 (85000 cents)
+2026-01-24 23:13:32,381 - DEBUG -   Tipo: NFE
+2026-01-24 23:13:32,381 - DEBUG -   Número: 732177
+2026-01-24 23:13:32,381 - DEBUG -   Parcela: None
+2026-01-24 23:13:32,381 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:32,407 - DEBUG - DPI Normalization: 595x842 -> 612x865 (scale=1.028)
+2026-01-24 23:13:32,410 - DEBUG - PDF carregado: 642 blocos de texto
+2026-01-24 23:13:32,450 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:32,590 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.05GB available
+2026-01-24 23:13:32,590 - DEBUG - Extracted '01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf':
+2026-01-24 23:13:32,590 - DEBUG -   Valor: 85000 cents
+2026-01-24 23:13:32,590 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:32,590 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:32,590 - DEBUG -   Tipo: None
+2026-01-24 23:13:32,590 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:32,596 - INFO - Comparando resultados...
+2026-01-24 23:13:32,597 - INFO - OK Valor: Match exato: 850.00
+2026-01-24 23:13:32,597 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:32,597 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:32,597 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:32,597 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:32,597 - INFO - Tempo: 216ms
+2026-01-24 23:13:32,597 - INFO - 
+[3/10] Processando: 01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF
+2026-01-24 23:13:32,597 - INFO - 
+============================================================
+2026-01-24 23:13:32,597 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF
+2026-01-24 23:13:32,597 - INFO - ============================================================
+2026-01-24 23:13:32,597 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:32,597 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF':
+2026-01-24 23:13:32,597 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:32,597 - DEBUG -   Entidade: MV
+2026-01-24 23:13:32,597 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-24 23:13:32,597 - DEBUG -   Valor: 270,00 (27000 cents)
+2026-01-24 23:13:32,597 - DEBUG -   Tipo: BOLETO
+2026-01-24 23:13:32,597 - DEBUG -   Número: 111534
+2026-01-24 23:13:32,597 - DEBUG -   Parcela: None
+2026-01-24 23:13:32,597 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:32,621 - DEBUG - DPI Normalization: 595x841 -> 612x865 (scale=1.029)
+2026-01-24 23:13:32,623 - DEBUG - PDF carregado: 250 blocos de texto
+2026-01-24 23:13:32,640 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:32,766 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.05GB available
+2026-01-24 23:13:32,766 - DEBUG - Extracted '01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF':
+2026-01-24 23:13:32,766 - DEBUG -   Valor: 27000 cents
+2026-01-24 23:13:32,766 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:32,766 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:32,767 - DEBUG -   Tipo: None
+2026-01-24 23:13:32,767 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:32,773 - INFO - Comparando resultados...
+2026-01-24 23:13:32,773 - INFO - OK Valor: Match exato: 270.00
+2026-01-24 23:13:32,773 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:32,773 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:32,773 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:32,773 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:32,773 - INFO - Tempo: 175ms
+2026-01-24 23:13:32,773 - INFO - 
+[4/10] Processando: 01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf
+2026-01-24 23:13:32,773 - INFO - 
+============================================================
+2026-01-24 23:13:32,773 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf
+2026-01-24 23:13:32,773 - INFO - ============================================================
+2026-01-24 23:13:32,773 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:32,773 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf':
+2026-01-24 23:13:32,773 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:32,773 - DEBUG -   Entidade: MV
+2026-01-24 23:13:32,773 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-24 23:13:32,773 - DEBUG -   Valor: 270,00 (27000 cents)
+2026-01-24 23:13:32,773 - DEBUG -   Tipo: NFE
+2026-01-24 23:13:32,773 - DEBUG -   Número: 111534
+2026-01-24 23:13:32,773 - DEBUG -   Parcela: None
+2026-01-24 23:13:32,773 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:32,798 - DEBUG - DPI Normalization: 596x842 -> 612x866 (scale=1.028)
+2026-01-24 23:13:32,800 - DEBUG - PDF carregado: 442 blocos de texto
+2026-01-24 23:13:32,829 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:32,965 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.06GB available
+2026-01-24 23:13:32,965 - DEBUG - Extracted '01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf':
+2026-01-24 23:13:32,965 - DEBUG -   Valor: 27000 cents
+2026-01-24 23:13:32,965 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:32,965 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:32,965 - DEBUG -   Tipo: None
+2026-01-24 23:13:32,965 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:32,971 - INFO - Comparando resultados...
+2026-01-24 23:13:32,971 - INFO - OK Valor: Match exato: 270.00
+2026-01-24 23:13:32,971 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:32,971 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:32,971 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:32,971 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:32,971 - INFO - Tempo: 198ms
+2026-01-24 23:13:32,971 - INFO - 
+[5/10] Processando: 01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF
+2026-01-24 23:13:32,971 - INFO - 
+============================================================
+2026-01-24 23:13:32,971 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF
+2026-01-24 23:13:32,971 - INFO - ============================================================
+2026-01-24 23:13:32,971 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:32,971 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF':
+2026-01-24 23:13:32,971 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:32,971 - DEBUG -   Entidade: MV
+2026-01-24 23:13:32,971 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-24 23:13:32,971 - DEBUG -   Valor: 81,00 (8100 cents)
+2026-01-24 23:13:32,971 - DEBUG -   Tipo: BOLETO
+2026-01-24 23:13:32,971 - DEBUG -   Número: 111535
+2026-01-24 23:13:32,971 - DEBUG -   Parcela: None
+2026-01-24 23:13:32,971 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:32,996 - DEBUG - DPI Normalization: 595x841 -> 612x865 (scale=1.029)
+2026-01-24 23:13:32,999 - DEBUG - PDF carregado: 250 blocos de texto
+2026-01-24 23:13:33,016 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:33,141 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.06GB available
+2026-01-24 23:13:33,141 - DEBUG - Extracted '01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF':
+2026-01-24 23:13:33,141 - DEBUG -   Valor: 8100 cents
+2026-01-24 23:13:33,141 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:33,141 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:33,141 - DEBUG -   Tipo: None
+2026-01-24 23:13:33,141 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:33,148 - INFO - Comparando resultados...
+2026-01-24 23:13:33,148 - INFO - OK Valor: Match exato: 81.00
+2026-01-24 23:13:33,148 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:33,148 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:33,148 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:33,148 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:33,148 - INFO - Tempo: 176ms
+2026-01-24 23:13:33,148 - INFO - 
+[6/10] Processando: 01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf
+2026-01-24 23:13:33,148 - INFO - 
+============================================================
+2026-01-24 23:13:33,148 - INFO - TESTANDO: 01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf
+2026-01-24 23:13:33,148 - INFO - ============================================================
+2026-01-24 23:13:33,148 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:33,148 - DEBUG - Parsed '01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf':
+2026-01-24 23:13:33,148 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:33,148 - DEBUG -   Entidade: MV
+2026-01-24 23:13:33,148 - DEBUG -   Fornecedor: SANTA CLARA
+2026-01-24 23:13:33,148 - DEBUG -   Valor: 81,00 (8100 cents)
+2026-01-24 23:13:33,148 - DEBUG -   Tipo: NFE
+2026-01-24 23:13:33,148 - DEBUG -   Número: 111535
+2026-01-24 23:13:33,148 - DEBUG -   Parcela: None
+2026-01-24 23:13:33,148 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:33,174 - DEBUG - DPI Normalization: 596x842 -> 612x866 (scale=1.028)
+2026-01-24 23:13:33,177 - DEBUG - PDF carregado: 450 blocos de texto
+2026-01-24 23:13:33,206 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:33,328 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.06GB available
+2026-01-24 23:13:33,328 - DEBUG - Extracted '01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf':
+2026-01-24 23:13:33,328 - DEBUG -   Valor: 8100 cents
+2026-01-24 23:13:33,328 - DEBUG -   Entidade: EntityTag.MV
+2026-01-24 23:13:33,328 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:33,328 - DEBUG -   Tipo: None
+2026-01-24 23:13:33,328 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:33,334 - INFO - Comparando resultados...
+2026-01-24 23:13:33,334 - INFO - OK Valor: Match exato: 81.00
+2026-01-24 23:13:33,334 - INFO - OK Entidade: Match: MV
+2026-01-24 23:13:33,334 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:33,334 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:33,334 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:33,334 - INFO - Tempo: 186ms
+2026-01-24 23:13:33,334 - INFO - 
+[7/10] Processando: 01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf
+2026-01-24 23:13:33,334 - INFO - 
+============================================================
+2026-01-24 23:13:33,334 - INFO - TESTANDO: 01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf
+2026-01-24 23:13:33,334 - INFO - ============================================================
+2026-01-24 23:13:33,334 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:33,334 - DEBUG - Parsed '01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf':
+2026-01-24 23:13:33,334 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:33,335 - DEBUG -   Entidade: VG
+2026-01-24 23:13:33,335 - DEBUG -   Fornecedor: ABDALLA TRUCK
+2026-01-24 23:13:33,335 - DEBUG -   Valor: 370,00 (37000 cents)
+2026-01-24 23:13:33,335 - DEBUG -   Tipo: BOLETO
+2026-01-24 23:13:33,335 - DEBUG -   Número: 20590
+2026-01-24 23:13:33,335 - DEBUG -   Parcela: None
+2026-01-24 23:13:33,335 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:33,364 - DEBUG - DPI Normalization: 595x842 -> 612x866 (scale=1.029)
+2026-01-24 23:13:33,366 - DEBUG - PDF carregado: 247 blocos de texto
+2026-01-24 23:13:33,384 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:33,517 - DEBUG - Memory [After cleanup]: 0.25GB used, 18.05GB available
+2026-01-24 23:13:33,517 - DEBUG - Extracted '01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf':
+2026-01-24 23:13:33,517 - DEBUG -   Valor: 37000 cents
+2026-01-24 23:13:33,517 - DEBUG -   Entidade: EntityTag.VG
+2026-01-24 23:13:33,517 - DEBUG -   Fornecedor: None
+2026-01-24 23:13:33,517 - DEBUG -   Tipo: None
+2026-01-24 23:13:33,517 - DEBUG -   Confiança: 1.00
+2026-01-24 23:13:33,523 - INFO - Comparando resultados...
+2026-01-24 23:13:33,523 - INFO - OK Valor: Match exato: 370.00
+2026-01-24 23:13:33,523 - INFO - OK Entidade: Match: VG
+2026-01-24 23:13:33,523 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:13:33,523 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:13:33,523 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:13:33,523 - INFO - Tempo: 188ms
+2026-01-24 23:13:33,523 - INFO - 
+[8/10] Processando: 01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf
+2026-01-24 23:13:33,523 - INFO - 
+============================================================
+2026-01-24 23:13:33,523 - INFO - TESTANDO: 01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf
+2026-01-24 23:13:33,523 - INFO - ============================================================
+2026-01-24 23:13:33,523 - INFO - Parseando nome do arquivo...
+2026-01-24 23:13:33,523 - DEBUG - Parsed '01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf':
+2026-01-24 23:13:33,523 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:13:33,523 - DEBUG -   Entidade: VG
+2026-01-24 23:13:33,523 - DEBUG -   Fornecedor: ABDALLA TRUCK
+2026-01-24 23:13:33,523 - DEBUG -   Valor: 370,00 (37000 cents)
+2026-01-24 23:13:33,523 - DEBUG -   Tipo: NFSE
+2026-01-24 23:13:33,523 - DEBUG -   Número: 20590
+2026-01-24 23:13:33,523 - DEBUG -   Parcela: None
+2026-01-24 23:13:33,523 - INFO - Extraindo dados do documento...
+2026-01-24 23:13:33,563 - DEBUG - DPI Normalization: 595x842 -> 612x866 (scale=1.029)
+2026-01-24 23:13:33,579 - DEBUG - PDF carregado: 496 blocos de texto
+2026-01-24 23:13:33,583 - DEBUG - Nenhuma âncora encontrada para 'due_date'
+2026-01-24 23:13:33,587 - DEBUG - Nenhuma âncora encontrada para 'emission_date'
+2026-01-24 23:13:33,594 - DEBUG - Nenhuma âncora encontrada para 'amount'
+2026-01-24 23:13:33,597 - DEBUG - Nenhuma âncora encontrada para 'cnpj_emissor'
+2026-01-24 23:13:33,599 - DEBUG - Nenhuma âncora encontrada para 'cnpj_destinatario'
+2026-01-24 23:13:34,090 - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2026-01-24 23:13:34,350 - DEBUG - https://huggingface.co:443 "HEAD / HTTP/1.1" 200 0
+2026-01-24 23:13:34,352 - DEBUG - Starting new HTTPS connection (1): aistudio.baidu.com:443
+2026-01-24 23:13:36,026 - DEBUG - https://aistudio.baidu.com:443 "HEAD / HTTP/1.1" 200 0
+2026-01-24 23:13:36,028 - DEBUG - Starting new HTTPS connection (1): modelscope.cn:443
+2026-01-24 23:13:37,476 - DEBUG - https://modelscope.cn:443 "HEAD / HTTP/1.1" 200 0
+2026-01-24 23:13:37,478 - DEBUG - Starting new HTTPS connection (1): paddle-model-ecology.bj.bcebos.com:443
+2026-01-24 23:13:38,785 - DEBUG - https://paddle-model-ecology.bj.bcebos.com:443 "HEAD / HTTP/1.1" 200 0
+2026-01-24 23:13:38,897 - DEBUG - matplotlib data path: C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\matplotlib\mpl-data
+2026-01-24 23:13:38,905 - DEBUG - CONFIGDIR=C:\Users\otavi\.matplotlib
+2026-01-24 23:13:38,905 - DEBUG - interactive is False
+2026-01-24 23:13:38,906 - DEBUG - platform is win32
+2026-01-24 23:13:38,921 - DEBUG - CACHEDIR=C:\Users\otavi\.matplotlib
+2026-01-24 23:13:38,930 - DEBUG - Using fontManager instance from C:\Users\otavi\.matplotlib\fontlist-v390.json
+2026-01-24 23:13:40,087 - INFO - Loading PaddleOCR (CPU)...
+2026-01-24 23:13:42,451 - INFO - PaddleOCR loaded
+2026-01-24 23:13:43,178 - ERROR - PaddleOCR error: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
+
+2026-01-24 23:13:43,180 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:43,585 - DEBUG - Memory [After cleanup]: 0.64GB used, 17.65GB available
+2026-01-24 23:13:43,585 - INFO - PaddleOCR unloaded
+2026-01-24 23:13:43,621 - INFO - Loading Florence-2 (microsoft/Florence-2-base) on CPU...
+2026-01-24 23:13:45,638 - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2026-01-24 23:13:45,987 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/processor_config.json HTTP/1.1" 404 0
+2026-01-24 23:13:46,145 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/preprocessor_config.json HTTP/1.1" 307 0
+2026-01-24 23:13:46,170 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/preprocessor_config.json HTTP/1.1" 200 0
+2026-01-24 23:13:46,321 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/preprocessor_config.json HTTP/1.1" 307 0
+2026-01-24 23:13:46,347 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/preprocessor_config.json HTTP/1.1" 200 0
+2026-01-24 23:13:46,496 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/processor_config.json HTTP/1.1" 404 0
+2026-01-24 23:13:46,651 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/processing_florence2.py HTTP/1.1" 307 0
+2026-01-24 23:13:46,682 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/processing_florence2.py HTTP/1.1" 200 0
+2026-01-24 23:13:46,848 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/preprocessor_config.json HTTP/1.1" 307 0
+2026-01-24 23:13:46,874 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/preprocessor_config.json HTTP/1.1" 200 0
+2026-01-24 23:13:47,031 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/processor_config.json HTTP/1.1" 404 0
+2026-01-24 23:13:47,212 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/tokenizer_config.json HTTP/1.1" 307 0
+2026-01-24 23:13:47,236 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/tokenizer_config.json HTTP/1.1" 200 0
+2026-01-24 23:13:47,388 - DEBUG - https://huggingface.co:443 "GET /api/models/microsoft/Florence-2-base/tree/main/additional_chat_templates?recursive=False&expand=False HTTP/1.1" 404 64
+2026-01-24 23:13:47,536 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/configuration_florence2.py HTTP/1.1" 307 0
+2026-01-24 23:13:47,562 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/configuration_florence2.py HTTP/1.1" 200 0
+2026-01-24 23:13:47,793 - DEBUG - https://huggingface.co:443 "GET /api/models/microsoft/Florence-2-base/tree/main/additional_chat_templates?recursive=False&expand=False HTTP/1.1" 404 64
+2026-01-24 23:13:47,942 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/processor_config.json HTTP/1.1" 404 0
+2026-01-24 23:13:48,092 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/chat_template.json HTTP/1.1" 404 0
+2026-01-24 23:13:48,242 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/chat_template.jinja HTTP/1.1" 404 0
+2026-01-24 23:13:48,391 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/audio_tokenizer_config.json HTTP/1.1" 404 0
+2026-01-24 23:13:48,637 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/config.json HTTP/1.1" 307 0
+2026-01-24 23:13:48,661 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/config.json HTTP/1.1" 200 0
+2026-01-24 23:13:48,810 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/configuration_florence2.py HTTP/1.1" 307 0
+2026-01-24 23:13:48,835 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/configuration_florence2.py HTTP/1.1" 200 0
+2026-01-24 23:13:48,984 - DEBUG - https://huggingface.co:443 "HEAD /microsoft/Florence-2-base/resolve/main/modeling_florence2.py HTTP/1.1" 307 0
+2026-01-24 23:13:49,010 - DEBUG - https://huggingface.co:443 "HEAD /api/resolve-cache/models/microsoft/Florence-2-base/5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac/modeling_florence2.py HTTP/1.1" 200 0
+2026-01-24 23:13:49,972 - WARNING - Failed to load Florence-2: 'Florence2ForConditionalGeneration' object has no attribute '_supports_sdpa'
+2026-01-24 23:13:49,977 - DEBUG - Traceback (most recent call last):
+  File "C:\Users\otavi\Documents\Projetos_programação\SDRA_2\florence2_voter.py", line 102, in _load_model
+    self.model = AutoModelForCausalLM.from_pretrained(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\models\auto\auto_factory.py", line 597, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 277, in _wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 4971, in from_pretrained
+    model = cls(config, *model_args, **model_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\.cache\huggingface\modules\transformers_modules\microsoft\Florence_hyphen_2_hyphen_base\5ca5edf5bd017b9919c05d08aebef5e4c7ac3bac\modeling_florence2.py", line 2535, in __init__
+    super().__init__(config)
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 2076, in __init__
+    self.config._attn_implementation_internal = self._check_and_adjust_attn_implementation(
+                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 2686, in _check_and_adjust_attn_implementation
+    applicable_attn_implementation = self.get_correct_attn_implementation(
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 2722, in get_correct_attn_implementation
+    self._sdpa_can_dispatch(is_init_check)
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\modeling_utils.py", line 2573, in _sdpa_can_dispatch
+    if not self._supports_sdpa:
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\otavi\AppData\Local\Programs\Python\Python312\Lib\site-packages\torch\nn\modules\module.py", line 1965, in __getattr__
+    raise AttributeError(
+AttributeError: 'Florence2ForConditionalGeneration' object has no attribute '_supports_sdpa'
+
+2026-01-24 23:13:49,981 - INFO - Forcing memory cleanup...
+2026-01-24 23:13:50,568 - DEBUG - Memory [After cleanup]: 0.78GB used, 17.48GB available
+2026-01-24 23:13:50,568 - INFO - Florence-2 unloaded
+2026-01-24 23:13:50,570 - INFO - Loading Surya models (CPU-only)...
+2026-01-24 23:13:51,253 - INFO - Surya models loaded (CPU)
+2026-01-24 23:13:51,253 - INFO - Running Surya OCR on 1 page(s)...
+2026-01-24 23:15:09,621 - DEBUG - Page 1: extracted 2208 chars
+2026-01-24 23:15:09,622 - INFO - Surya extracted 2208 chars total
+2026-01-24 23:15:09,651 - INFO - Forcing memory cleanup...
+2026-01-24 23:15:10,250 - DEBUG - Memory [After cleanup]: 3.76GB used, 14.78GB available
+2026-01-24 23:15:10,251 - INFO - Surya models unloaded
+2026-01-24 23:15:10,251 - INFO - Forcing memory cleanup...
+2026-01-24 23:15:10,836 - DEBUG - Memory [After cleanup]: 3.76GB used, 14.78GB available
+2026-01-24 23:15:10,836 - INFO - Surya models unloaded
+2026-01-24 23:15:10,838 - INFO - Forcing memory cleanup...
+2026-01-24 23:15:11,450 - DEBUG - Memory [After cleanup]: 3.75GB used, 14.79GB available
+2026-01-24 23:15:11,452 - DEBUG - Extracted '01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf':
+2026-01-24 23:15:11,452 - DEBUG -   Valor: 37000 cents
+2026-01-24 23:15:11,452 - DEBUG -   Entidade: None
+2026-01-24 23:15:11,452 - DEBUG -   Fornecedor: None
+2026-01-24 23:15:11,452 - DEBUG -   Tipo: None
+2026-01-24 23:15:11,452 - DEBUG -   Confiança: 1.00
+2026-01-24 23:15:11,461 - INFO - Comparando resultados...
+2026-01-24 23:15:11,461 - INFO - OK Valor: Match exato: 370.00
+2026-01-24 23:15:11,461 - WARNING - WARN Entidade: Valor vazio
+2026-01-24 23:15:11,461 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:15:11,461 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:15:11,461 - INFO - 
+RESULTADO: ✓ PASSOU
+2026-01-24 23:15:11,461 - INFO - Tempo: 97938ms
+2026-01-24 23:15:11,461 - INFO - 
+[9/10] Processando: 01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-24 23:15:11,462 - INFO - 
+============================================================
+2026-01-24 23:15:11,462 - INFO - TESTANDO: 01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-24 23:15:11,462 - INFO - ============================================================
+2026-01-24 23:15:11,462 - INFO - Parseando nome do arquivo...
+2026-01-24 23:15:11,462 - DEBUG - Parsed '01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf':
+2026-01-24 23:15:11,462 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:15:11,462 - DEBUG -   Entidade: VG
+2026-01-24 23:15:11,462 - DEBUG -   Fornecedor: AGRO BAGGIO
+2026-01-24 23:15:11,462 - DEBUG -   Valor: 2.843,29 (284329 cents)
+2026-01-24 23:15:11,462 - DEBUG -   Tipo: NFE
+2026-01-24 23:15:11,462 - DEBUG -   Número: 414978
+2026-01-24 23:15:11,462 - DEBUG -   Parcela: 2-2
+2026-01-24 23:15:11,462 - INFO - Extraindo dados do documento...
+2026-01-24 23:15:11,487 - DEBUG - DPI Normalization: 595x842 -> 612x866 (scale=1.028)
+2026-01-24 23:15:11,490 - DEBUG - PDF carregado: 529 blocos de texto
+2026-01-24 23:15:11,496 - DEBUG - Nenhuma âncora encontrada para 'due_date'
+2026-01-24 23:15:11,527 - INFO - Forcing memory cleanup...
+2026-01-24 23:15:12,112 - DEBUG - Memory [After cleanup]: 3.75GB used, 14.79GB available
+2026-01-24 23:15:12,113 - DEBUG - Extracted '01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf':
+2026-01-24 23:15:12,113 - DEBUG -   Valor: 431827 cents
+2026-01-24 23:15:12,113 - DEBUG -   Entidade: EntityTag.VG
+2026-01-24 23:15:12,113 - DEBUG -   Fornecedor: None
+2026-01-24 23:15:12,113 - DEBUG -   Tipo: None
+2026-01-24 23:15:12,113 - DEBUG -   Confiança: 1.00
+2026-01-24 23:15:12,121 - INFO - Comparando resultados...
+2026-01-24 23:15:12,121 - ERROR - FALHA Valor: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98
+2026-01-24 23:15:12,121 - INFO - OK Entidade: Match: VG
+2026-01-24 23:15:12,121 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:15:12,121 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:15:12,121 - INFO - 
+RESULTADO: ✗ FALHOU
+2026-01-24 23:15:12,121 - INFO - Tempo: 659ms
+2026-01-24 23:15:12,121 - INFO - 
+[10/10] Processando: 01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-24 23:15:12,121 - INFO - 
+============================================================
+2026-01-24 23:15:12,121 - INFO - TESTANDO: 01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-24 23:15:12,121 - INFO - ============================================================
+2026-01-24 23:15:12,121 - INFO - Parseando nome do arquivo...
+2026-01-24 23:15:12,122 - DEBUG - Parsed '01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf':
+2026-01-24 23:15:12,122 - DEBUG -   Data: 01.11.2025
+2026-01-24 23:15:12,122 - DEBUG -   Entidade: VG
+2026-01-24 23:15:12,122 - DEBUG -   Fornecedor: AGRO BAGGIO
+2026-01-24 23:15:12,122 - DEBUG -   Valor: 2.843,29 (284329 cents)
+2026-01-24 23:15:12,122 - DEBUG -   Tipo: BOLETO
+2026-01-24 23:15:12,122 - DEBUG -   Número: 414978
+2026-01-24 23:15:12,122 - DEBUG -   Parcela: 2-2
+2026-01-24 23:15:12,122 - INFO - Extraindo dados do documento...
+2026-01-24 23:15:12,147 - DEBUG - DPI Normalization: 595x842 -> 612x866 (scale=1.028)
+2026-01-24 23:15:12,150 - DEBUG - PDF carregado: 366 blocos de texto
+2026-01-24 23:15:12,178 - INFO - Forcing memory cleanup...
+2026-01-24 23:15:12,762 - DEBUG - Memory [After cleanup]: 3.75GB used, 14.79GB available
+2026-01-24 23:15:12,762 - DEBUG - Extracted '01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf':
+2026-01-24 23:15:12,762 - DEBUG -   Valor: 10 cents
+2026-01-24 23:15:12,762 - DEBUG -   Entidade: EntityTag.VG
+2026-01-24 23:15:12,762 - DEBUG -   Fornecedor: None
+2026-01-24 23:15:12,762 - DEBUG -   Tipo: None
+2026-01-24 23:15:12,762 - DEBUG -   Confiança: 1.00
+2026-01-24 23:15:12,771 - INFO - Comparando resultados...
+2026-01-24 23:15:12,771 - ERROR - FALHA Valor: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19
+2026-01-24 23:15:12,771 - INFO - OK Entidade: Match: VG
+2026-01-24 23:15:12,771 - WARNING - WARN Fornecedor: Um ou ambos valores vazios
+2026-01-24 23:15:12,771 - WARNING - WARN Tipo: Valor vazio
+2026-01-24 23:15:12,772 - INFO - 
+RESULTADO: ✗ FALHOU
+2026-01-24 23:15:12,772 - INFO - Tempo: 650ms
+2026-01-24 23:15:12,772 - INFO - 
+######################################################################
+2026-01-24 23:15:12,772 - INFO - # RESUMO DO TESTE
+2026-01-24 23:15:12,772 - INFO - ######################################################################
+2026-01-24 23:15:12,772 - INFO - 
+TOTAL DE ARQUIVOS: 10
+2026-01-24 23:15:12,772 - INFO -   ✓ Passou:  8 (80.0%)
+2026-01-24 23:15:12,772 - INFO -   ✗ Falhou:  2 (20.0%)
+2026-01-24 23:15:12,772 - INFO -   ⚠ Erros:   0
+2026-01-24 23:15:12,772 - INFO - 
+TEMPO DE EXECUÇÃO:
+2026-01-24 23:15:12,772 - INFO -   Total:  101.7s
+2026-01-24 23:15:12,772 - INFO -   Médio:  10172ms/arquivo
+2026-01-24 23:15:12,772 - INFO - 
+PRECISÃO POR CAMPO:
+2026-01-24 23:15:12,772 - INFO -   amount         :  80.0% (8/10)
+2026-01-24 23:15:12,772 - INFO -   doc_type       :   0.0% (0/10)
+2026-01-24 23:15:12,772 - INFO -   entity         :  90.0% (9/10)
+2026-01-24 23:15:12,772 - INFO -   supplier       :   0.0% (0/10)
+2026-01-24 23:15:12,772 - INFO - 
+PRECISÃO POR TIPO DE DOCUMENTO:
+2026-01-24 23:15:12,772 - INFO -   BOLETO         :  80.0% (4/5)
+2026-01-24 23:15:12,772 - INFO -   NFE            :  75.0% (3/4)
+2026-01-24 23:15:12,772 - INFO -   NFSE           : 100.0% (1/1)
+2026-01-24 23:15:12,772 - INFO - 
+PRECISÃO POR ENTIDADE:
+2026-01-24 23:15:12,772 - INFO -   MV             : 100.0% (6/6)
+2026-01-24 23:15:12,772 - INFO -   VG             :  50.0% (2/4)
+2026-01-24 23:15:12,772 - INFO - 
+======================================================================
+2026-01-24 23:15:12,772 - INFO - TOP 20 FALHAS (de 2 total)
+2026-01-24 23:15:12,772 - INFO - ======================================================================
+2026-01-24 23:15:12,772 - INFO - 
+01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf
+2026-01-24 23:15:12,772 - INFO -   Ground Truth: 2.843,29 (284329 cents) | VG | AGRO BAGGIO
+2026-01-24 23:15:12,772 - INFO -   Extraído:     431827 cents | EntityTag.VG | None
+2026-01-24 23:15:12,772 - INFO -   ERRO: Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98
+2026-01-24 23:15:12,772 - INFO - 
+01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf
+2026-01-24 23:15:12,772 - INFO -   Ground Truth: 2.843,29 (284329 cents) | VG | AGRO BAGGIO
+2026-01-24 23:15:12,772 - INFO -   Extraído:     10 cents | EntityTag.VG | None
+2026-01-24 23:15:12,772 - INFO -   ERRO: Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19
+2026-01-24 23:15:12,774 - INFO - 
+Resultados salvos em: extraction_test_sample.json
+2026-01-24 23:15:12,774 - INFO - Log salvo em: extraction_test_log_20260124_231331.txt

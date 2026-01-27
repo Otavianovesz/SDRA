@@ -75,6 +75,16 @@ class Florence2Voter:
         try:
             logger.info(f"Loading Florence-2 ({self.model_id}) on CPU...")
             
+            # BLINDAGEM: Mock flash_attn para evitar erro em CPU
+            import sys
+            import types
+            import importlib.machinery
+            
+            if "flash_attn" not in sys.modules:
+                m = types.ModuleType("flash_attn")
+                m.__spec__ = importlib.machinery.ModuleSpec("flash_attn", None)
+                sys.modules["flash_attn"] = m
+            
             # Try different processor imports based on transformers version
             processor_cls = None
             try:

@@ -1,0 +1,858 @@
+{
+  "version": "1.0",
+  "generated_at": "2025-12-21T18:41:41.216811",
+  "description": "Ground truth dataset for SDRA extraction validation",
+  "instructions": "Verify each entry and set is_verified=true after manual validation",
+  "documents": [
+    {
+      "file": "01.11.2025_MV_CADORE BIDOIA_3.108,00_BOLETO_FECHAMENTO.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "CADORE BIDOIA",
+        "valor_centavos": 310800,
+        "numero_documento": "",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "CADORE BIDOIA",
+        "valor_centavos": 85000,
+        "numero_documento": "732177",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_270,00_BOLETO_111534.PDF",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 27000,
+        "numero_documento": "111534",
+        "sisbb_auth": "C.N.P.J."
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 27000,
+        "numero_documento": "111534",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_81,00_BOLETO_111535.PDF",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 8100,
+        "numero_documento": "111535",
+        "sisbb_auth": "C.N.P.J."
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 8100,
+        "numero_documento": "111535",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_ABDALLA TRUCK_370,00_BOLETO_20590.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 37000,
+        "numero_documento": "",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "UNKNOWN",
+        "fornecedor": "",
+        "valor_centavos": 0,
+        "numero_documento": "",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 0.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AGRO BAGGIO",
+        "valor_centavos": 568658,
+        "numero_documento": "414978",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AGRO BAGGIO_2.843,29_PARC 2-2_BOLETO_414978.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "AGRO BAGGIO",
+        "valor_centavos": 284329,
+        "numero_documento": "414978",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_ARAGUAIA AGRICOLA_5.591,22_NFE_149522.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "ARAGUAIA AGRICOLA",
+        "valor_centavos": 559122,
+        "numero_documento": "149522",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_ARAGUAIA AGRICOLA_612,99_1.838,98_PARC 2-3_NFE_109939.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "ARAGUAIA AGRICOLA",
+        "valor_centavos": 183898,
+        "numero_documento": "109939",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_1.364,40_NFE_111933.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 136440,
+        "numero_documento": "111933",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_330,00_NFSE_46616.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFSE",
+        "fornecedor": "",
+        "valor_centavos": 33000,
+        "numero_documento": "46616",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_1.694,40_BOLETO_111933_46616.PDF",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 169440,
+        "numero_documento": "111933",
+        "sisbb_auth": "C.N.P.J."
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_120,00_NFSE_46615.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFSE",
+        "fornecedor": "",
+        "valor_centavos": 12000,
+        "numero_documento": "46615",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_130,00_NFE_111932.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 13000,
+        "numero_documento": "111932",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_250,00_BOLETO_111932_46615.PDF",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 25000,
+        "numero_documento": "111932",
+        "sisbb_auth": "C.N.P.J."
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_3.455,00_2.555,00_PARC 3-3_NFE_109635.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 766500,
+        "numero_documento": "109635",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_AUTO ELETRICA SANTA CLARA_3.455,00_900,00_PARC 3-3_NFSE_45611.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFSE",
+        "fornecedor": "",
+        "valor_centavos": 270000,
+        "numero_documento": "45611",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_1.142,00_BOLETO_961905_962065_957569_955833.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "CADORE BIDOIA",
+        "valor_centavos": 114200,
+        "numero_documento": "",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_3.108,00_FATURA_FECHAMENTO.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFSE",
+        "fornecedor": "",
+        "valor_centavos": 310800,
+        "numero_documento": "770887",
+        "sisbb_auth": "9.99.99.99"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_40.688,00_BOLETO_FECHAMENTO.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "CADORE BIDOIA",
+        "valor_centavos": 4068800,
+        "numero_documento": "",
+        "sisbb_auth": ""
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_40.688,00_FATURA_FECHAMENTO.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFSE",
+        "fornecedor": "",
+        "valor_centavos": 4068800,
+        "numero_documento": "769458",
+        "sisbb_auth": "9.99.99.99"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "01.11.2025_VG_CADORE BIDOIA_450,00_NFE_961905.pdf",
+      "folder": "11.2025_NOVEMBRO_1.547",
+      "ground_truth": {
+        "doc_type": "NFE",
+        "fornecedor": "CADORE BIDOIA",
+        "valor_centavos": 45000,
+        "numero_documento": "961905",
+        "sisbb_auth": "I.C.M.S."
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 03112025 - Pagamento - 2.663,27.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 266327,
+        "numero_documento": "",
+        "sisbb_auth": "6.106.151.985.8A9.D57"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 03112025 - Pagamento - 270,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 27000,
+        "numero_documento": "",
+        "sisbb_auth": "E.DC3.B04.F95.797.5D3"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 03112025 - Transferência - 43.999,16.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "UNKNOWN",
+        "fornecedor": "",
+        "valor_centavos": 4399916,
+        "numero_documento": "",
+        "sisbb_auth": "523.228.000.053.753"
+      },
+      "extraction_confidence": 0.6,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 19112025 - Pagamento - 5.537,25.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "LUCA COMERCIO DE FERRAGENS",
+        "valor_centavos": 553725,
+        "numero_documento": "",
+        "sisbb_auth": "F.D1E.61A.25B.AA4.4F3"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 24112025 - Pagamento - 266,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 26600,
+        "numero_documento": "",
+        "sisbb_auth": "7.9FB.8BA.DB7.9C9.50D"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "1 - 27112025 - Pagamento - 115,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 11500,
+        "numero_documento": "31343260001388624",
+        "sisbb_auth": "E.855.70C.AC9.841.912"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 03112025 - Pagamento - 1.574,85.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 157485,
+        "numero_documento": "",
+        "sisbb_auth": "4.614.8E2.8E0.DEA.758"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 03112025 - Pagamento - 476,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 47600,
+        "numero_documento": "",
+        "sisbb_auth": "F.BF9.85A.E93.DFA.AFB"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 03112025 - Pagamento - 8.000,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "CEIFAGRO COMERCIO",
+        "valor_centavos": 800000,
+        "numero_documento": "",
+        "sisbb_auth": "D.5E0.FAE.E94.8CA.0E2"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 03112025 - Transferência - 14.000,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "MANUTEC BOMBAS E COMPRESSORES",
+        "valor_centavos": 1400000,
+        "numero_documento": "110354",
+        "sisbb_auth": "F.0F1.0F5.EAD.69E.C9C"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 19112025 - Pagamento - 76.500,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "MARCA RS COMERCIO",
+        "valor_centavos": 7650000,
+        "numero_documento": "",
+        "sisbb_auth": "9.A50.8A8.A8C.07E.9FF"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 24112025 - Pagamento - 220,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "AUTO ELETRICA SANTA CLARA",
+        "valor_centavos": 22000,
+        "numero_documento": "",
+        "sisbb_auth": "3.5E5.B90.51D.F4F.1A2"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "10 - 27112025 - Pagamento - 529,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 52900,
+        "numero_documento": "",
+        "sisbb_auth": "2.5E6.9FA.9DA.A39.B8E"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "100 - 25112025 - Pagamento - 3.980,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "IGLIKOSKI E IGLIKOSKI",
+        "valor_centavos": 398000,
+        "numero_documento": "",
+        "sisbb_auth": "1.90A.B05.693.DBF.109"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "100 - 28112025 - Pagamento - 13.617,64.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "",
+        "valor_centavos": 1361764,
+        "numero_documento": "112873",
+        "sisbb_auth": "E.0FB.9F5.CED.3E1.68E"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "101 - 25112025 - Pagamento - 5.392,42.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 539242,
+        "numero_documento": "",
+        "sisbb_auth": "2.9E6.575.D00.293.0D3"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "101 - 28112025 - Pagamento - 13.835,94.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "",
+        "valor_centavos": 1383594,
+        "numero_documento": "112874",
+        "sisbb_auth": "5.F66.F6F.949.915.EC3"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "102 - 25112025 - Pagamento - 100,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 10000,
+        "numero_documento": "",
+        "sisbb_auth": "6.381.9A6.8A4.A49.DA7"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "102 - 28112025 - Transferência - 3.000,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "TONELLO MATERIAIS CONSTRUCAO",
+        "valor_centavos": 300000,
+        "numero_documento": "112875",
+        "sisbb_auth": "1.A59.C97.FFD.C40.AD3"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "103 - 25112025 - Pagamento - 244,20.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 24420,
+        "numero_documento": "31287090000026247",
+        "sisbb_auth": "9.C6A.4F1.1A8.9D7.63C"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "103 - 28112025 - Transferência - 7.000,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "TONELLO MATERIAIS CONSTRUCAO",
+        "valor_centavos": 700000,
+        "numero_documento": "112876",
+        "sisbb_auth": "F.A72.438.BB2.7B6.B71"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "104 - 25112025 - Pagamento - 374,31.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 37431,
+        "numero_documento": "27905970000836794",
+        "sisbb_auth": "2.9B6.6B6.72E.7EA.3B6"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "104 - 28112025 - Transferência - 4.500,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "CLEIDIANE FERREIRA",
+        "valor_centavos": 450000,
+        "numero_documento": "112877",
+        "sisbb_auth": "A.A0C.342.EBF.53D.A0C"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "105 - 25112025 - Pagamento - 377,67.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "BOLETO",
+        "fornecedor": "",
+        "valor_centavos": 37767,
+        "numero_documento": "27905970000823215",
+        "sisbb_auth": "3.8BD.DD6.264.308.E0D"
+      },
+      "extraction_confidence": 0.8,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    },
+    {
+      "file": "105 - 28112025 - Transferência - 6.200,00.pdf",
+      "folder": "NOVEMBRO_COMPROVANTES_N_CONCILIADO",
+      "ground_truth": {
+        "doc_type": "COMPROVANTE",
+        "fornecedor": "LEANDRO MOREIRA DOS SANTOS",
+        "valor_centavos": 620000,
+        "numero_documento": "112878",
+        "sisbb_auth": "F.9A2.767.12B.DDF.C69"
+      },
+      "extraction_confidence": 1.0,
+      "meta": {
+        "is_verified": false,
+        "verified_by": "",
+        "notes": ""
+      }
+    }
+  ]
+}

@@ -44,6 +44,9 @@ from database import (
     KNOWN_CPFS
 )
 
+# Importa Core Logic (SRDA-Rural 2.0)
+from srda_rural_core import OCRSanitizer, FinancialRegexRegistry, DocumentProcessor
+
 # Importa o EnsembleExtractor para extracao avancada (OCR, GLiNER, etc)
 try:
     from ensemble_extractor import EnsembleExtractor, ExtractionResult
@@ -54,12 +57,66 @@ except ImportError:
     print("[AVISO] EnsembleExtractor nao disponivel, usando extracao basica")
 
 # Importa barcode extractor para boletos (optional)
+# Importa barcode extractor para boletos (optional)
 try:
     from barcode_extractor import get_barcode_extractor
     BARCODE_AVAILABLE = True
 except ImportError:
     get_barcode_extractor = None
     BARCODE_AVAILABLE = False
+
+def load_known_suppliers_full(db_connection=None) -> Dict[str, str]:
+    """
+    Carrega fornecedores do banco de dados ou arquivo known_suppliers.txt.
+    Retorna Dict[Nome, CNPJ] (CNPJ pode ser vazio).
+    """
+    suppliers = {}
+    
+    # 1. Tente carregar do Banco de Dados (se conexao disponivel)
+    if db_connection:
+        try:
+            # Tenta buscar da tabela de transacoes ou documentos
+            # Como nao existe tabela de fornecedores, extraimos nomes unicos de transacoes
+            cursor = db_connection.execute("SELECT DISTINCT supplier_clean FROM transacoes WHERE supplier_clean IS NOT NULL")
+            for row in cursor.fetchall():
+                name = row[0].strip().upper()
+                if name:
+                    suppliers[name] = "" # Sem CNPJ conhecido por enquanto
+        except Exception as e:
+            logger.warning(f"Erro ao carregar fornecedores do DB: {e}")
+
+    # 2. Carrega/Complementa do arquivo txt
+    try:
+        if os.path.exists("known_suppliers.txt"):
+            with open("known_suppliers.txt", "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"): continue
+                    
+                    # pipe format: CANONICAL|ALIAS1|ALIAS2
+                    parts = line.split("|")
+                    canonical = parts[0].strip().upper()
+                    if canonical:
+                         if canonical not in suppliers:
+                             suppliers[canonical] = ""
+                         # Adiciona aliases tambem como chaves apontando para mesmo CNPJ (vazio)
+                         for alias in parts[1:]:
+                             alias_clean = alias.strip().upper()
+                             if alias_clean:
+                                 suppliers[alias_clean] = ""
+                                 
+                    # Old format support (= or :)
+                    elif "=" in line:
+                        key, val = line.split("=", 1)
+                        suppliers[key.strip().upper()] = val.strip()
+                    elif ":" in line:
+                        key, val = line.split(":", 1)
+                        suppliers[key.strip().strip('"').upper()] = val.strip().strip('",')
+
+    except Exception as e:
+        logger.warning(f"Erro ao carregar known_suppliers.txt: {e}")
+        
+    return suppliers
 
 
 # ==============================================================================
@@ -141,9 +198,7 @@ REGEX_PATTERNS = {
     ),
     
     # Data brasileira (DD/MM/AAAA ou DD.MM.AAAA)
-    "date_br": re.compile(
-        r'\b(\d{2})[/\.\-](\d{2})[/\.\-](\d{4})\b'
-    ),
+    "date_br": FinancialRegexRegistry.PATTERN_DATE_BR,
     
     # Data vencimento especifica
     "due_date": re.compile(
@@ -168,9 +223,7 @@ REGEX_PATTERNS = {
     ),
     
     # CNPJ
-    "cnpj": re.compile(
-        r'\b(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}\-?\d{2})\b'
-    ),
+    "cnpj": FinancialRegexRegistry.PATTERN_CNPJ_CANDIDATE,
     
     # Linha digitavel do boleto (47 digitos com espacos)
     "digitable_line": re.compile(
@@ -304,6 +357,35 @@ class CognitiveScanner:
         
         # Cria pasta de entrada se nao existir
         self.input_folder.mkdir(parents=True, exist_ok=True)
+
+        # Inicializa Document Processor
+        # Passa conexao do DB se existir para melhor carregamento
+        db_conn = self.db.connection if self.db else None
+        known_suppliers = load_known_suppliers_full(db_conn)
+        self.processor = DocumentProcessor(known_suppliers)
+    
+    def _extract_hints_from_filename(self, filename: str) -> Dict[str, Any]:
+        """Extrai dicas (Data, Fornecedor) do nome do arquivo."""
+        hints = {"date": None, "supplier": None, "entity": None}
+        try:
+            # Padrão esperado: DATA_ENTIDADE_FORNECEDOR_...
+            parts = Path(filename).stem.split('_')
+            if len(parts) >= 3:
+                # Data
+                import re
+                date_match = re.match(r'^(\d{2})[\.\-](\d{2})[\.\-](\d{4})$', parts[0])
+                if date_match:
+                    hints['date'] = f"{date_match.group(3)}-{date_match.group(2)}-{date_match.group(1)}"
+                
+                # Entidade
+                if parts[1].upper() in ['VG', 'MV']:
+                    hints['entity'] = parts[1].upper()
+                    
+                # Fornecedor
+                hints['supplier'] = parts[2].strip()
+        except Exception:
+            pass
+        return hints
     
     # ==========================================================================
     # VARREDURA DE DIRETORIOS
@@ -389,28 +471,35 @@ class CognitiveScanner:
     # EXTRACAO DE DADOS
     # ==========================================================================
     
+        return 0
+    
     def extract_amount(self, text: str) -> int:
         """
-        Extrai valor monetario do texto.
-        
-        Args:
-            text: Texto para busca
-            
-        Returns:
-            Valor em centavos (0 se nao encontrado)
+        Extrai valor monetario do texto usando Regex Robusto e Sanitização via Core Logic.
         """
-        # Tenta primeiro com prefixo (R$, Total, Valor)
-        match = REGEX_PATTERNS["amount"].search(text)
-        if match:
-            return SRDADatabase.amount_to_cents(match.group(1))
+        # 1. Sanitização prévia (limpa R$, espaços, letras confundidas com números)
+        clean_text = OCRSanitizer.clean_currency_string(text)
         
-        # Busca todos os valores no texto
+        # 2. Busca com Regex Registry
+        # O novo regex retorna grupos nomeados: inteiro, decimal
+        match = FinancialRegexRegistry.PATTERN_BRL_VALUE.search(clean_text)
+        if match:
+            inteiro = match.group("inteiro").replace('.', '').replace(' ', '')
+            decimal = match.group("decimal")
+            if not decimal: decimal = "00"
+            decimal = decimal.replace(',', '').replace('.', '') # Garante apenas digitos
+            
+            try:
+                return int(inteiro) * 100 + int(decimal)
+            except:
+                pass
+
+        # Fallback para regex antigo apenas se falhar
         matches = REGEX_PATTERNS["amount_plain"].findall(text)
         if matches:
-            # Pega o maior valor encontrado (geralmente o total)
-            amounts = [SRDADatabase.amount_to_cents(m) for m in matches]
-            return max(amounts) if amounts else 0
-        
+             amounts = [SRDADatabase.amount_to_cents(m) for m in matches]
+             return max(amounts) if amounts else 0
+
         return 0
     
     def extract_date(self, text: str, pattern_name: str = "date_br") -> Optional[str]:
@@ -619,8 +708,19 @@ class CognitiveScanner:
             "amount_cents": 0, "due_date": None, "emission_date": None,
             "supplier_name": None, "cnpj": None, "entity_tag": None,
             "confidence": 0.0, "doc_type": str(doc_type) if doc_type else None,
-            "extraction_path": "failed", "error": None
+            "extraction_path": "failed", "error": None,
+            "review_needed": False,
+            "method": "NONE"
         }
+
+        # 0. CONSTANTES & HINTS (Battle Plan Step 102-104)
+        hints = self._extract_hints_from_filename(file_path.name)
+        if hints['date']: result['due_date'] = hints['date']
+        if hints['supplier']: result['supplier_name'] = hints['supplier']
+        if hints['entity']: 
+            from database import EntityTag
+            if hints['entity'] == 'VG': result['entity_tag'] = EntityTag.VG
+            elif hints['entity'] == 'MV': result['entity_tag'] = EntityTag.MV
 
         try:
             # --- PATH 1: DIGITAL (Rápido) ---
@@ -716,37 +816,43 @@ class CognitiveScanner:
 
             # --- PATH 3: VLM (Florence-2 - Último Recurso) ---
             # Protegido por Try/Except específico para não crashar o loop
-            try:
-                # Só carrega se realmente necessário
-                logger.info(f"Acionando VLM (Heavy Path) para {file_path.name}")
-                
-                florence = get_florence2_voter()
-                
-                # Extrai texto com regions
-                vlm_res = florence.extract_from_pdf(str(file_path), page_num)
-                
-                if 'text' in vlm_res:
-                    vlm_text = vlm_res['text']
-                    
-                    # Re-aplica regex sobre texto superior do VLM
-                    amt_vlm = self.extract_amount(vlm_text)
-                    if amt_vlm > 0:
-                        result['amount_cents'] = amt_vlm
-                        result['confidence'] = 0.6  # Confiança menor pois é expensive
-                        result['extraction_path'] = "vlm_florence"
-                    
-                    if not result['due_date']:
-                        result['due_date'] = self.extract_due_date(vlm_text)
-                    
-                    if not result['emission_date']:
-                        result['emission_date'] = self.extract_emission_date(vlm_text)
+            # Battle Plan Step 110: Skip if hints are good enough
+            can_skip_vlm = (hints['supplier'] and hints['date']) or (result['confidence'] >= 0.7)
             
-            except AttributeError as ae:
-                # Captura o erro específico do SDPA se a correção do ponto 1 falhar
-                logger.error(f"Erro de compatibilidade no Florence-2: {ae}")
-                result['error'] = "Florence-2 Incompatible"
-            except Exception as e:
-                logger.error(f"Erro genérico no VLM: {e}")
+            if not can_skip_vlm:
+                try:
+                    # Só carrega se realmente necessário
+                    logger.info(f"Acionando VLM (Heavy Path) para {file_path.name}")
+                    
+                    florence = get_florence2_voter()
+                    
+                    # Extrai texto com regions
+                    vlm_res = florence.extract_from_pdf(str(file_path), page_num)
+                    
+                    if 'text' in vlm_res:
+                        vlm_text = vlm_res['text']
+                        
+                        # Re-aplica regex sobre texto superior do VLM
+                        amt_vlm = self.extract_amount(vlm_text)
+                        if amt_vlm > 0:
+                            result['amount_cents'] = amt_vlm
+                            result['confidence'] = 0.6  # Confiança menor pois é expensive
+                            result['extraction_path'] = "vlm_florence"
+                        
+                        if not result['due_date']:
+                            result['due_date'] = self.extract_due_date(vlm_text)
+                        
+                        if not result['emission_date']:
+                            result['emission_date'] = self.extract_emission_date(vlm_text)
+                
+                except AttributeError as ae:
+                    # Captura o erro específico do SDPA se a correção do ponto 1 falhar
+                    logger.error(f"Erro de compatibilidade no Florence-2: {ae}")
+                    result['error'] = "Florence-2 Incompatible"
+                except Exception as e:
+                    logger.error(f"Erro genérico no VLM: {e}")
+            else:
+                logger.info("VLM pulado (High Confidence/Hints)")
                 
         except Exception as e:
             logger.critical(f"Erro catastrófico no arquivo {file_path}: {e}")
@@ -767,6 +873,32 @@ class CognitiveScanner:
                  # Lógica simplificada - poderia usar DB mas por segurança apenas logamos
                  pass
 
+        # --- FINAL: CROSS VALIDATION (Battle Plan Step 112-114) ---
+        # Orquestra validação entre CNPJ extraído e Nome (seja do OCR ou Hint)
+        
+        # Determina o melhor nome candidato
+        candidate_name = result['supplier_name'] or hints['supplier'] or ""
+        candidate_cnpj = result['cnpj'] or ""
+        
+        # Só valida se tivermos info mínima
+        if candidate_name or candidate_cnpj:
+            val_res = self.processor.cross_validate_entity(candidate_name, candidate_cnpj)
+            
+            # Aplica resultado da validação
+            if val_res['status'] != "REJECTED":
+                result['supplier_name'] = val_res['final_name']
+                result['cnpj'] = val_res['final_cnpj']
+                result['method'] = val_res['method']
+                result['review_needed'] = val_res.get('review_needed', False)
+                # Boost confidence se foi aprovado
+                if val_res['status'] == "APPROVED":
+                    result['confidence'] = max(result['confidence'], 0.95)
+            else:
+                 # Rejeitado ou não encontrado. Mantém o que tem mas marca review.
+                 if not result['supplier_name']:
+                     result['supplier_name'] = candidate_name # Mantem original se não validou
+                 result['review_needed'] = True
+        
         return result
     
     # ==========================================================================

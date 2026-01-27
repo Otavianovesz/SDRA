@@ -1,14 +1,14 @@
 {
   "metadata": {
-    "test_date": "2026-01-26T12:35:43.160567",
+    "test_date": "2026-01-26T21:03:04.973356",
     "folder_path": "11.2025_NOVEMBRO_1.547",
-    "total_files_tested": 2568,
-    "log_file": "extraction_test_log_20260126_123335.txt"
+    "total_files_tested": 50,
+    "log_file": "extraction_test_log_20260126_210233.txt"
   },
   "statistics": {
-    "total_files": 2568,
-    "passed": 8,
-    "failed": 2,
+    "total_files": 50,
+    "passed": 4,
+    "failed": 6,
     "errors": 0,
     "by_doc_type": {
       "BOLETO": {
@@ -19,36 +19,36 @@
       },
       "NFE": {
         "total": 4,
-        "passed": 3,
-        "failed": 1,
-        "pass_rate": 75.0
+        "passed": 0,
+        "failed": 4,
+        "pass_rate": 0.0
       },
       "NFSE": {
         "total": 1,
-        "passed": 1,
-        "failed": 0,
-        "pass_rate": 100.0
+        "passed": 0,
+        "failed": 1,
+        "pass_rate": 0.0
       }
     },
     "by_entity": {
       "MV": {
         "total": 6,
-        "passed": 6,
-        "failed": 0,
-        "pass_rate": 100.0
+        "passed": 3,
+        "failed": 3,
+        "pass_rate": 50.0
       },
       "VG": {
         "total": 4,
-        "passed": 2,
-        "failed": 2,
-        "pass_rate": 50.0
+        "passed": 1,
+        "failed": 3,
+        "pass_rate": 25.0
       }
     },
     "by_field": {
       "amount": {
         "total": 10,
-        "matched": 8,
-        "match_rate": 80.0
+        "matched": 4,
+        "match_rate": 40.0
       },
       "entity": {
         "total": 10,
@@ -66,12 +66,12 @@
         "match_rate": 0.0
       }
     },
-    "total_time_ms": 128029,
-    "avg_time_ms": 49.855529595015575,
-    "pass_rate": 0.3115264797507788,
-    "fail_rate": 0.0778816199376947,
-    "total_execution_time_seconds": 128.03644394874573,
-    "end_time": "2026-01-26T12:35:43.159563"
+    "total_time_ms": 31493,
+    "avg_time_ms": 629.86,
+    "pass_rate": 8.0,
+    "fail_rate": 12.0,
+    "total_execution_time_seconds": 31.49819803237915,
+    "end_time": "2026-01-26T21:03:04.973356"
   },
   "results": [
     {
@@ -80,7 +80,7 @@
       "file_size": 22697,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 1523,
+      "total_test_time_ms": 1387,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -106,7 +106,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 1480,
+        "extraction_time_ms": 1386,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -150,9 +150,11 @@
       "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf",
       "file_size": 59215,
       "file_extension": ".pdf",
-      "overall_success": true,
-      "total_test_time_ms": 341,
-      "critical_failures": [],
+      "overall_success": false,
+      "total_test_time_ms": 215,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
+      ],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
         "Tipo incorreto: Valor vazio"
@@ -170,14 +172,14 @@
         "parse_success": true
       },
       "extraction": {
-        "amount_cents": 85000,
+        "amount_cents": 800,
         "entity": "EntityTag.MV",
         "supplier": null,
         "doc_type": null,
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 299,
+        "extraction_time_ms": 215,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -185,10 +187,10 @@
         {
           "field": "amount",
           "expected": 85000,
-          "extracted": 85000,
-          "match": true,
-          "match_type": "exact",
-          "details": "Match exato: 850.00"
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
         },
         {
           "field": "entity",
@@ -222,7 +224,7 @@
       "file_size": 31043,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 316,
+      "total_test_time_ms": 193,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -248,7 +250,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 279,
+        "extraction_time_ms": 191,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -292,9 +294,11 @@
       "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf",
       "file_size": 40573,
       "file_extension": ".pdf",
-      "overall_success": true,
-      "total_test_time_ms": 308,
-      "critical_failures": [],
+      "overall_success": false,
+      "total_test_time_ms": 200,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
+      ],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
         "Tipo incorreto: Valor vazio"
@@ -312,14 +316,14 @@
         "parse_success": true
       },
       "extraction": {
-        "amount_cents": 27000,
+        "amount_cents": 800,
         "entity": "EntityTag.MV",
         "supplier": null,
         "doc_type": null,
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 269,
+        "extraction_time_ms": 199,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -327,10 +331,10 @@
         {
           "field": "amount",
           "expected": 27000,
-          "extracted": 27000,
-          "match": true,
-          "match_type": "exact",
-          "details": "Match exato: 270.00"
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
         },
         {
           "field": "entity",
@@ -364,7 +368,7 @@
       "file_size": 31088,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 307,
+      "total_test_time_ms": 195,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -390,7 +394,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 268,
+        "extraction_time_ms": 194,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -434,9 +438,11 @@
       "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf",
       "file_size": 40736,
       "file_extension": ".pdf",
-      "overall_success": true,
-      "total_test_time_ms": 311,
-      "critical_failures": [],
+      "overall_success": false,
+      "total_test_time_ms": 194,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
+      ],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
         "Tipo incorreto: Valor vazio"
@@ -454,14 +460,14 @@
         "parse_success": true
       },
       "extraction": {
-        "amount_cents": 8100,
+        "amount_cents": 800,
         "entity": "EntityTag.MV",
         "supplier": null,
         "doc_type": null,
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 275,
+        "extraction_time_ms": 194,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -469,10 +475,10 @@
         {
           "field": "amount",
           "expected": 8100,
-          "extracted": 8100,
-          "match": true,
-          "match_type": "exact",
-          "details": "Match exato: 81.00"
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
         },
         {
           "field": "entity",
@@ -506,7 +512,7 @@
       "file_size": 91857,
       "file_extension": ".pdf",
       "overall_success": true,
-      "total_test_time_ms": 293,
+      "total_test_time_ms": 194,
       "critical_failures": [],
       "warnings": [
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -532,7 +538,7 @@
         "doc_number": null,
         "due_date": "2025-11-01",
         "confidence": 1.0,
-        "extraction_time_ms": 258,
+        "extraction_time_ms": 194,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -576,9 +582,11 @@
       "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf",
       "file_size": 100402,
       "file_extension": ".pdf",
-      "overall_success": true,
-      "total_test_time_ms": 123084,
-      "critical_failures": [],
+      "overall_success": false,
+      "total_test_time_ms": 27906,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
+      ],
       "warnings": [
         "Entidade incorreta: Valor vazio",
         "Fornecedor incorreto: Um ou ambos valores vazios",
@@ -597,14 +605,14 @@
         "parse_success": true
       },
       "extraction": {
-        "amount_cents": 37000,
+        "amount_cents": 0,
         "entity": null,
         "supplier": null,
         "doc_type": null,
         "doc_number": null,
-        "due_date": "2025-10-02",
-        "confidence": 1.0,
-        "extraction_time_ms": 123043,
+        "due_date": null,
+        "confidence": 0.0,
+        "extraction_time_ms": 27905,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -612,10 +620,10 @@
         {
           "field": "amount",
           "expected": 37000,
-          "extracted": 37000,
-          "match": true,
-          "match_type": "exact",
-          "details": "Match exato: 370.00"
+          "extracted": 0,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
         },
         {
           "field": "entity",
@@ -649,7 +657,7 @@
       "file_size": 103450,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 775,
+      "total_test_time_ms": 511,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98"
       ],
@@ -677,7 +685,7 @@
         "doc_number": null,
         "due_date": "2025-09-02",
         "confidence": 0.9999999999999999,
-        "extraction_time_ms": 736,
+        "extraction_time_ms": 510,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -722,7 +730,7 @@
       "file_size": 109419,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 771,
+      "total_test_time_ms": 498,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19"
       ],
@@ -750,7 +758,7 @@
         "doc_number": null,
         "due_date": "2025-11-03",
         "confidence": 1.0,
-        "extraction_time_ms": 732,
+        "extraction_time_ms": 498,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -792,12 +800,305 @@
   ],
   "failures": [
     {
+      "filename": "01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf",
+      "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_CADORE BIDOIA_850,00_NFE_732177.pdf",
+      "file_size": 59215,
+      "file_extension": ".pdf",
+      "overall_success": false,
+      "total_test_time_ms": 215,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
+      ],
+      "warnings": [
+        "Fornecedor incorreto: Um ou ambos valores vazios",
+        "Tipo incorreto: Valor vazio"
+      ],
+      "ground_truth": {
+        "due_date": "01.11.2025",
+        "entity": "MV",
+        "supplier": "CADORE BIDOIA",
+        "amount": "850,00",
+        "amount_cents": 85000,
+        "total_amount": null,
+        "doc_type": "NFE",
+        "doc_number": "732177",
+        "installment": null,
+        "parse_success": true
+      },
+      "extraction": {
+        "amount_cents": 800,
+        "entity": "EntityTag.MV",
+        "supplier": null,
+        "doc_type": null,
+        "doc_number": null,
+        "due_date": "2025-11-01",
+        "confidence": 1.0,
+        "extraction_time_ms": 215,
+        "extraction_method": "unknown",
+        "extraction_success": true
+      },
+      "comparisons": [
+        {
+          "field": "amount",
+          "expected": 85000,
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=850.00, extraído=8.00, diff=842.00"
+        },
+        {
+          "field": "entity",
+          "expected": "MV",
+          "extracted": "EntityTag.MV",
+          "match": true,
+          "match_type": "exact",
+          "details": "Match: MV"
+        },
+        {
+          "field": "supplier",
+          "expected": "CADORE BIDOIA",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Um ou ambos valores vazios"
+        },
+        {
+          "field": "doc_type",
+          "expected": "NFE",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Valor vazio"
+        }
+      ]
+    },
+    {
+      "filename": "01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf",
+      "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_SANTA CLARA_270,00_NFE_111534.pdf",
+      "file_size": 40573,
+      "file_extension": ".pdf",
+      "overall_success": false,
+      "total_test_time_ms": 200,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
+      ],
+      "warnings": [
+        "Fornecedor incorreto: Um ou ambos valores vazios",
+        "Tipo incorreto: Valor vazio"
+      ],
+      "ground_truth": {
+        "due_date": "01.11.2025",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": "270,00",
+        "amount_cents": 27000,
+        "total_amount": null,
+        "doc_type": "NFE",
+        "doc_number": "111534",
+        "installment": null,
+        "parse_success": true
+      },
+      "extraction": {
+        "amount_cents": 800,
+        "entity": "EntityTag.MV",
+        "supplier": null,
+        "doc_type": null,
+        "doc_number": null,
+        "due_date": "2025-11-01",
+        "confidence": 1.0,
+        "extraction_time_ms": 199,
+        "extraction_method": "unknown",
+        "extraction_success": true
+      },
+      "comparisons": [
+        {
+          "field": "amount",
+          "expected": 27000,
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=270.00, extraído=8.00, diff=262.00"
+        },
+        {
+          "field": "entity",
+          "expected": "MV",
+          "extracted": "EntityTag.MV",
+          "match": true,
+          "match_type": "exact",
+          "details": "Match: MV"
+        },
+        {
+          "field": "supplier",
+          "expected": "SANTA CLARA",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Um ou ambos valores vazios"
+        },
+        {
+          "field": "doc_type",
+          "expected": "NFE",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Valor vazio"
+        }
+      ]
+    },
+    {
+      "filename": "01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf",
+      "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_MV_SANTA CLARA_81,00_NFE_111535.pdf",
+      "file_size": 40736,
+      "file_extension": ".pdf",
+      "overall_success": false,
+      "total_test_time_ms": 194,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
+      ],
+      "warnings": [
+        "Fornecedor incorreto: Um ou ambos valores vazios",
+        "Tipo incorreto: Valor vazio"
+      ],
+      "ground_truth": {
+        "due_date": "01.11.2025",
+        "entity": "MV",
+        "supplier": "SANTA CLARA",
+        "amount": "81,00",
+        "amount_cents": 8100,
+        "total_amount": null,
+        "doc_type": "NFE",
+        "doc_number": "111535",
+        "installment": null,
+        "parse_success": true
+      },
+      "extraction": {
+        "amount_cents": 800,
+        "entity": "EntityTag.MV",
+        "supplier": null,
+        "doc_type": null,
+        "doc_number": null,
+        "due_date": "2025-11-01",
+        "confidence": 1.0,
+        "extraction_time_ms": 194,
+        "extraction_method": "unknown",
+        "extraction_success": true
+      },
+      "comparisons": [
+        {
+          "field": "amount",
+          "expected": 8100,
+          "extracted": 800,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=81.00, extraído=8.00, diff=73.00"
+        },
+        {
+          "field": "entity",
+          "expected": "MV",
+          "extracted": "EntityTag.MV",
+          "match": true,
+          "match_type": "exact",
+          "details": "Match: MV"
+        },
+        {
+          "field": "supplier",
+          "expected": "SANTA CLARA",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Um ou ambos valores vazios"
+        },
+        {
+          "field": "doc_type",
+          "expected": "NFE",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Valor vazio"
+        }
+      ]
+    },
+    {
+      "filename": "01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf",
+      "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_VG_ABDALLA TRUCK_370,00_NFSE_20590.pdf",
+      "file_size": 100402,
+      "file_extension": ".pdf",
+      "overall_success": false,
+      "total_test_time_ms": 27906,
+      "critical_failures": [
+        "Valor incorreto: Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
+      ],
+      "warnings": [
+        "Entidade incorreta: Valor vazio",
+        "Fornecedor incorreto: Um ou ambos valores vazios",
+        "Tipo incorreto: Valor vazio"
+      ],
+      "ground_truth": {
+        "due_date": "01.11.2025",
+        "entity": "VG",
+        "supplier": "ABDALLA TRUCK",
+        "amount": "370,00",
+        "amount_cents": 37000,
+        "total_amount": null,
+        "doc_type": "NFSE",
+        "doc_number": "20590",
+        "installment": null,
+        "parse_success": true
+      },
+      "extraction": {
+        "amount_cents": 0,
+        "entity": null,
+        "supplier": null,
+        "doc_type": null,
+        "doc_number": null,
+        "due_date": null,
+        "confidence": 0.0,
+        "extraction_time_ms": 27905,
+        "extraction_method": "unknown",
+        "extraction_success": true
+      },
+      "comparisons": [
+        {
+          "field": "amount",
+          "expected": 37000,
+          "extracted": 0,
+          "match": false,
+          "match_type": "none",
+          "details": "Fora da tolerância: esperado=370.00, extraído=0.00, diff=370.00"
+        },
+        {
+          "field": "entity",
+          "expected": "VG",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Valor vazio"
+        },
+        {
+          "field": "supplier",
+          "expected": "ABDALLA TRUCK",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Um ou ambos valores vazios"
+        },
+        {
+          "field": "doc_type",
+          "expected": "NFSE",
+          "extracted": null,
+          "match": false,
+          "match_type": "none",
+          "details": "Valor vazio"
+        }
+      ]
+    },
+    {
       "filename": "01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf",
       "file_path": "11.2025_NOVEMBRO_1.547\\01.11.2025_VG_AGRO BAGGIO_2.843,29_5.686,58_PARC 2-2_NFE_414978.pdf",
       "file_size": 103450,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 775,
+      "total_test_time_ms": 511,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=4318.27, diff=1474.98"
       ],
@@ -825,7 +1126,7 @@
         "doc_number": null,
         "due_date": "2025-09-02",
         "confidence": 0.9999999999999999,
-        "extraction_time_ms": 736,
+        "extraction_time_ms": 510,
         "extraction_method": "unknown",
         "extraction_success": true
       },
@@ -870,7 +1171,7 @@
       "file_size": 109419,
       "file_extension": ".pdf",
       "overall_success": false,
-      "total_test_time_ms": 771,
+      "total_test_time_ms": 498,
       "critical_failures": [
         "Valor incorreto: Fora da tolerância: esperado=2843.29, extraído=0.10, diff=2843.19"
       ],
@@ -898,7 +1199,7 @@
         "doc_number": null,
         "due_date": "2025-11-03",
         "confidence": 1.0,
-        "extraction_time_ms": 732,
+        "extraction_time_ms": 498,
         "extraction_method": "unknown",
         "extraction_success": true
       },

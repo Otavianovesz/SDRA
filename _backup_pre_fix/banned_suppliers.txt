@@ -1,0 +1,47 @@
+# BANNED SUPPLIERS - Do not extract these as suppliers
+# These appear in documents but are NOT the actual supplier/beneficiario
+
+# Pagadores (company paying, not receiving)
+AUTO ELETRICA MENIN
+MENIN COMERCIO DE PECAS
+MENIN
+
+# Software/IT companies in document systems
+MULTISEG INFORMATICA
+MULTISEG
+DELTA TECNOLOGIA
+
+# Insurance companies appearing in transport docs
+MAPFRE SEGUROS
+MAPFRE
+
+# Government/Tax entities
+SEFAZ
+SEFAZ AUTORIZADORA
+IBPT
+
+# Generic document terms
+PAGADOR
+SACADO
+BENEFICIARIO
+FINAL VENCIME
+EMPRESA DE PEQUENO PORTE
+EPP
+MEI
+
+# Specific wrong extractions from tests
+VAGNER LUIZ GAIATTO E OUTRA
+VAGNER LUIZ GAIATTO
+PIONEIRO COMBUSTIVEIS
+AGROFIBRAMUTUM LTDA
+AGROFIBRAMUTUM
+NOVA MUTUM BORRACHA
+G. Z. BARGERI KANIESKI
+BARGERI KANIESKI
+COMAGRAN MT
+
+# Document type identifiers
+DOCUMENTO AUXILIAR
+NOTA FISCAL
+BOLETO BANCARIO
+DANF3E

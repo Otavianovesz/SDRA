@@ -746,6 +746,45 @@ class SRDAApplication:
                             UPDATE documentos SET entity_tag = ? WHERE id = ?
                         """, (entity_val, doc_id))
                     
+                # Update document status
+                new_status = 'PARSED'
+                status_msg = "✅ PARSED"
+                
+                if result.get('review_needed'):
+                    status_msg = "⚠️ REVIEW"
+                    # Opcional: Poderiamos ter um status 'REVIEW' no DB, mas por enquanto mantemos PARSED
+                    # porem logamos ou marcamos de alguma forma.
+                
+                if result['amount_cents'] > 0 or result['due_date'] or result['cnpj']:
+                    # Update or insert transaction
+                    cursor.execute("""
+                        SELECT id FROM transacoes WHERE doc_id = ?
+                    """, (doc_id,))
+                    trans_row = cursor.fetchone()
+                    
+                    if trans_row:
+                        # Update existing transaction
+                        cursor.execute("""
+                            UPDATE transacoes SET
+                                amount_cents = COALESCE(NULLIF(?, 0), amount_cents),
+                                due_date = COALESCE(?, due_date),
+                                emission_date = COALESCE(?, emission_date)
+                            WHERE doc_id = ?
+                        """, (result['amount_cents'], result['due_date'], result['emission_date'], doc_id))
+                    else:
+                        # Insert new transaction
+                        cursor.execute("""
+                            INSERT INTO transacoes (doc_id, amount_cents, due_date, emission_date)
+                            VALUES (?, ?, ?, ?)
+                        """, (doc_id, result['amount_cents'], result['due_date'], result['emission_date']))
+                    
+                    # Update entity if found
+                    if result.get('entity_tag'):
+                        entity_val = result['entity_tag'].value if hasattr(result['entity_tag'], 'value') else str(result['entity_tag'])
+                        cursor.execute("""
+                            UPDATE documentos SET entity_tag = ? WHERE id = ?
+                        """, (entity_val, doc_id))
+                    
                     # Update document status
                     cursor.execute("""
                         UPDATE documentos SET status = 'PARSED' WHERE id = ?
@@ -754,7 +793,7 @@ class SRDAApplication:
                     self.db.connection.commit()
                     
                     # Update tree with extracted data
-                    self.gui_queue.put(("tree_update", (doc_id, "✅ PARSED")))
+                    self.gui_queue.put(("tree_update", (doc_id, status_msg)))
                     processed += 1
                 else:
                     # No data extracted
