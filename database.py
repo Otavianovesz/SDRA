@@ -47,12 +47,26 @@ class DocumentType(Enum):
 class DocumentStatus(Enum):
     """
     Estados do processamento de documentos.
-    Permite pausar e retomar o trabalho (crash-only software).
+    
+    Ciclo de Vida Completo:
+    INGESTED → PARSED → PENDING → MATCHED → RECONCILED → RENAMED → ARCHIVED
+    
+    - INGESTED: Arquivo detectado e hasheado
+    - PARSED: Texto extraído e metadados parseados
+    - PENDING: Aguardando match com outros documentos
+    - MATCHED: Match encontrado (NFe+Boleto), mas sem comprovante
+    - RECONCILED: Vinculado com comprovante de pagamento
+    - RENAMED: Arquivo renomeado no disco
+    - ARCHIVED: Finalizado e sai da lista principal
+    - ERROR: Erro durante processamento
     """
     INGESTED = "INGESTED"       # Arquivo detectado e hasheado
     PARSED = "PARSED"           # Texto extraído e metadados parseados
-    RECONCILED = "RECONCILED"   # Vinculado a outros documentos
+    PENDING = "PENDING"         # Aguardando match com outros documentos
+    MATCHED = "MATCHED"         # Match encontrado, sem comprovante
+    RECONCILED = "RECONCILED"   # Vinculado a outros documentos + comprovante
     RENAMED = "RENAMED"         # Arquivo renomeado no disco
+    ARCHIVED = "ARCHIVED"       # Finalizado (sai da lista principal)
     ERROR = "ERROR"             # Erro durante processamento
 
 
@@ -225,16 +239,24 @@ class SRDADatabase:
             ("ALTER TABLE documentos ADD COLUMN source VARCHAR DEFAULT 'manual'", "source"),
             ("ALTER TABLE documentos ADD COLUMN email_message_id VARCHAR", "email_message_id"),
             ("ALTER TABLE documentos ADD COLUMN email_subject VARCHAR", "email_subject"),
+            # GroupMatcher: Add link_id for document grouping (NFe + Boleto + Comprovante)
+            ("ALTER TABLE transacoes ADD COLUMN link_id INTEGER", "link_id"),
         ]
         
         for sql, col_name in migrations:
             try:
                 conn.execute(sql)
-                logger.info(f"Migration: Added column '{col_name}' to documentos")
+                logger.info(f"Migration: Added column '{col_name}'")
             except Exception as e:
                 # Column likely already exists
                 if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
                     logger.debug(f"Migration skipped for '{col_name}': {e}")
+        
+        # Create index for link_id clustering
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_transacoes_link ON transacoes(link_id);")
+        except:
+            pass
 
     # --- Helpers ---
     def _fetchall_as_dict(self, query: str, params: List = []) -> List[Dict]:
@@ -374,13 +396,149 @@ class SRDADatabase:
         """, [doc_id, doc_id])
         
     def get_all_open_documents(self) -> List[Dict]:
+        """
+        Retorna todos os documentos ATIVOS (não arquivados).
+        
+        Exclui: ARCHIVED, ERROR
+        Inclui: INGESTED, PARSED, PENDING, MATCHED, RECONCILED, RENAMED
+        """
         return self._fetchall_as_dict("""
-            SELECT d.id, d.doc_type, d.entity_tag, d.original_path, 
-                   t.amount_cents, t.supplier_clean, t.due_date, t.payment_date, t.emission_date
+            SELECT d.id, d.doc_type, d.entity_tag, d.original_path, d.status,
+                   t.amount_cents, t.supplier_clean, t.due_date, t.payment_date, 
+                   t.emission_date, t.link_id
             FROM documentos d
             LEFT JOIN transacoes t ON d.id = t.doc_id
-            WHERE d.status != 'RECONCILED'
+            WHERE d.status NOT IN ('ARCHIVED', 'ERROR')
+            ORDER BY d.created_at DESC
         """)
+    
+    def get_documents_by_lifecycle_status(self, statuses: List[str]) -> List[Dict]:
+        """
+        Retorna documentos por status específicos.
+        
+        Args:
+            statuses: Lista de status (ex: ['PENDING', 'MATCHED'])
+        
+        Returns:
+            Lista de documentos com dados de transação
+        """
+        placeholders = ','.join(['?' for _ in statuses])
+        query = f"""
+            SELECT d.id, d.doc_type, d.entity_tag, d.original_path, d.status,
+                   t.amount_cents, t.supplier_clean, t.due_date, t.payment_date, 
+                   t.emission_date, t.link_id
+            FROM documentos d
+            LEFT JOIN transacoes t ON d.id = t.doc_id
+            WHERE d.status IN ({placeholders})
+            ORDER BY d.created_at DESC
+        """
+        return self._fetchall_as_dict(query, statuses)
+    
+    def transition_document_status(self, doc_id: int, new_status: DocumentStatus) -> bool:
+        """
+        Transiciona documento para novo status com validação.
+        
+        Transições válidas:
+        - INGESTED → PARSED
+        - PARSED → PENDING, ERROR
+        - PENDING → MATCHED, ERROR
+        - MATCHED → RECONCILED, ERROR
+        - RECONCILED → RENAMED, ERROR
+        - RENAMED → ARCHIVED, ERROR
+        
+        Args:
+            doc_id: ID do documento
+            new_status: Novo status desejado
+        
+        Returns:
+            True se transição foi válida e executada
+        """
+        # Mapa de transições válidas
+        valid_transitions = {
+            'INGESTED': ['PARSED', 'ERROR'],
+            'PARSED': ['PENDING', 'MATCHED', 'ERROR'],  # Pode ir direto para MATCHED se já tiver grupo
+            'PENDING': ['MATCHED', 'RECONCILED', 'ERROR'],  # Pode pular para RECONCILED se achar comprovante
+            'MATCHED': ['RECONCILED', 'RENAMED', 'ERROR'],  # Pode renomear mesmo sem comprovante
+            'RECONCILED': ['RENAMED', 'ERROR'],
+            'RENAMED': ['ARCHIVED', 'ERROR'],
+            'ERROR': ['INGESTED'],  # Permite retry
+        }
+        
+        try:
+            # Buscar status atual
+            result = self.connection.execute(
+                "SELECT status FROM documentos WHERE id = ?", [doc_id]
+            ).fetchone()
+            
+            if not result:
+                logger.warning(f"Document {doc_id} not found")
+                return False
+            
+            current_status = result[0]
+            
+            # Validar transição
+            if new_status.value not in valid_transitions.get(current_status, []):
+                logger.warning(f"Invalid transition: {current_status} → {new_status.value}")
+                return False
+            
+            # Executar transição
+            self.connection.execute(
+                "UPDATE documentos SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                [new_status.value, doc_id]
+            )
+            logger.info(f"Document {doc_id}: {current_status} → {new_status.value}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error transitioning document {doc_id}: {e}")
+            return False
+    
+    def archive_group(self, link_id: int) -> int:
+        """
+        Arquiva todos os documentos de um grupo.
+        
+        Args:
+            link_id: ID do grupo
+        
+        Returns:
+            Número de documentos arquivados
+        """
+        try:
+            result = self.connection.execute("""
+                UPDATE documentos 
+                SET status = 'ARCHIVED', updated_at = CURRENT_TIMESTAMP
+                WHERE id IN (
+                    SELECT doc_id FROM transacoes WHERE link_id = ?
+                )
+                RETURNING id
+            """, [link_id]).fetchall()
+            
+            count = len(result) if result else 0
+            logger.info(f"Archived {count} documents from group {link_id}")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error archiving group {link_id}: {e}")
+            return 0
+    
+    def get_lifecycle_statistics(self) -> Dict[str, int]:
+        """
+        Retorna estatísticas por status do ciclo de vida.
+        
+        Returns:
+            Dict com contagem por status
+        """
+        try:
+            result = self.connection.execute("""
+                SELECT status, COUNT(*) as count 
+                FROM documentos 
+                GROUP BY status
+            """).fetchall()
+            
+            return {row[0]: row[1] for row in result}
+        except Exception as e:
+            logger.error(f"Error getting lifecycle stats: {e}")
+            return {}
 
     def get_statistics(self) -> Dict[str, Any]:
         stats = {}
@@ -389,11 +547,14 @@ class SRDADatabase:
             stats['total_transactions'] = self.connection.execute("SELECT COUNT(*) FROM transacoes").fetchone()[0]
             stats['total_matches'] = self.connection.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
             stats['total_corrections'] = self.connection.execute("SELECT COUNT(*) FROM corrections_log").fetchone()[0]
+            # Adiciona estatísticas de lifecycle
+            stats['lifecycle'] = self.get_lifecycle_statistics()
         except:
              stats['total_documents'] = 0
              stats['total_transactions'] = 0
              stats['total_matches'] = 0
              stats['total_corrections'] = 0
+             stats['lifecycle'] = {}
         return stats
 
     # ==========================================================================

@@ -57,13 +57,20 @@ except ImportError:
     print("[AVISO] EnsembleExtractor nao disponivel, usando extracao basica")
 
 # Importa barcode extractor para boletos (optional)
-# Importa barcode extractor para boletos (optional)
 try:
     from barcode_extractor import get_barcode_extractor
     BARCODE_AVAILABLE = True
 except ImportError:
     get_barcode_extractor = None
     BARCODE_AVAILABLE = False
+
+# Importa GroupMatcher para auto-match pós-extração (Sprint 5)
+try:
+    from group_matcher import GroupMatcher
+    GROUP_MATCHER_AVAILABLE = True
+except ImportError:
+    GroupMatcher = None
+    GROUP_MATCHER_AVAILABLE = False
 
 def load_known_suppliers_full(db_connection=None) -> Dict[str, str]:
     """
@@ -173,14 +180,36 @@ KEYWORDS = {
 }
 
 # Palavras-chave NEGATIVAS que indicam agendamento (nao pagamento efetivo)
+# Expandido para cobrir padrões do Banco do Brasil e outros bancos
 SCHEDULING_KEYWORDS = [
+    # Termos gerais
     "AGENDAMENTO",
     "AGENDADO",
     "PREVISTO",
     "DATA PROGRAMADA",
     "PAGAMENTO PROGRAMADO",
     "ORDEM FUTURA",
+    # Termos específicos BB (Banco do Brasil)
+    "PREVISÃO DE DÉBITO",
+    "AGENDAR PAGAMENTO",
+    "PAGAMENTO AGENDADO PARA",
+    "DATA PREVISTA",
+    "DÉBITO FUTURO",
+    "PAGAMENTO SERÁ EFETUADO",
+    "CONFIRMAÇÃO DE AGENDAMENTO",
+    # Termos de outros bancos
+    "TRANSFERÊNCIA AGENDADA",
+    "PIX AGENDADO",
+    "TED AGENDADA",
+    "DOC AGENDADO",
 ]
+
+# Regex para validação de autenticação SISBB (Banco do Brasil)
+# Formato típico: X.123.456.789 ou similar
+SISBB_AUTH_PATTERN = re.compile(
+    r'\b([A-Z0-9]{1})[\.\\s]?([A-Z0-9]{3})[\.\\s]?([A-Z0-9]{3})[\.\\s]?([A-Z0-9]{3})\b',
+    re.IGNORECASE
+)
 
 # Regex para extracao de dados
 REGEX_PATTERNS = {
@@ -364,6 +393,15 @@ class CognitiveScanner:
         # Gemini Voter (lazy load - só carrega quando necessário)
         self._gemini_voter = None
         self._use_cloud_ai = True  # Flag para habilitar fallback IA
+        
+        # GroupMatcher para auto-match pós-extração (Sprint 5)
+        self.group_matcher = None
+        if GROUP_MATCHER_AVAILABLE:
+            try:
+                self.group_matcher = GroupMatcher(self.db)
+                print("[OK] GroupMatcher ativado (auto-match pós-extração)")
+            except Exception as e:
+                print(f"[AVISO] Falha ao iniciar GroupMatcher: {e}")
     
     @property
     def gemini_voter(self):
@@ -497,6 +535,8 @@ class CognitiveScanner:
         """
         Detecta se um comprovante e de AGENDAMENTO (nao pagamento efetivo).
         
+        Expandido para incluir padrões do Banco do Brasil e outros bancos.
+        
         Args:
             text: Texto do documento
             
@@ -505,15 +545,72 @@ class CognitiveScanner:
         """
         text_upper = text.upper()
         for keyword in SCHEDULING_KEYWORDS:
-            if keyword in text_upper:
+            if keyword.upper() in text_upper:
+                logger.debug(f"Scheduling keyword detected: {keyword}")
                 return True
         return False
+    
+    def validate_bb_payment(self, text: str) -> Tuple[bool, str]:
+        """
+        Valida comprovante do Banco do Brasil.
+        
+        Verifica se é um pagamento efetivo ou agendamento baseado em:
+        1. Presença de keywords de agendamento (negativo)
+        2. Presença de autenticação SISBB (positivo)
+        3. Combinação de indicadores de pagamento efetivo
+        
+        Args:
+            text: Texto completo do comprovante
+            
+        Returns:
+            Tuple[is_confirmed, reason]:
+            - is_confirmed: True se pagamento confirmado, False se agendamento
+            - reason: String explicativa do motivo
+        """
+        text_upper = text.upper()
+        
+        # 1. Se tem keyword de AGENDAMENTO → definitivamente não é pagamento
+        for keyword in SCHEDULING_KEYWORDS:
+            if keyword.upper() in text_upper:
+                return False, f"AGENDAMENTO_DETECTADO: '{keyword}'"
+        
+        # 2. Se não tem autenticação SISBB → suspeito (mas não conclusivo)
+        sisbb_match = SISBB_AUTH_PATTERN.search(text)
+        has_sisbb = sisbb_match is not None
+        
+        # 3. Busca indicadores de pagamento efetivo
+        payment_confirmed_keywords = [
+            "PAGAMENTO EFETUADO",
+            "TRANSAÇÃO EFETUADA",
+            "TRANSFERÊNCIA REALIZADA",
+            "PIX ENVIADO",
+            "TED ENVIADA",
+            "DOC ENVIADO",
+            "DÉBITO EFETUADO",
+            "OPERAÇÃO REALIZADA"
+        ]
+        has_payment_confirmation = any(kw in text_upper for kw in payment_confirmed_keywords)
+        
+        # 4. Lógica de decisão
+        if has_sisbb and has_payment_confirmation:
+            auth_code = f"{sisbb_match.group(1)}.{sisbb_match.group(2)}.{sisbb_match.group(3)}.{sisbb_match.group(4)}" if sisbb_match else "N/A"
+            return True, f"PAGAMENTO_CONFIRMADO: SISBB={auth_code}"
+        
+        if has_payment_confirmation and not has_sisbb:
+            # Pode ser outro banco (não BB), aceita mas com ressalva
+            return True, "PAGAMENTO_CONFIRMADO_SEM_SISBB"
+        
+        if has_sisbb and not has_payment_confirmation:
+            # Tem autenticação mas falta confirmação explícita - aceita com ressalva
+            auth_code = f"{sisbb_match.group(1)}.{sisbb_match.group(2)}.{sisbb_match.group(3)}.{sisbb_match.group(4)}" if sisbb_match else "N/A"
+            return True, f"PAGAMENTO_PROVAVEL: SISBB={auth_code}, sem keyword de confirmação"
+        
+        # 5. Sem indicadores positivos fortes → requer revisão
+        return False, "SEM_INDICADORES: Sem SISBB nem confirmação de pagamento"
     
     # ==========================================================================
     # EXTRACAO DE DADOS
     # ==========================================================================
-    
-        return 0
     
     def extract_amount(self, text: str) -> int:
         """
@@ -1870,6 +1967,15 @@ class CognitiveScanner:
                         is_scheduled=is_scheduled,
                         supplier_clean=supplier_name  # Novo campo
                     )
+                    
+                    # Sprint 5: Auto-match pós-extração
+                    if self.group_matcher and amount > 0:
+                        try:
+                            link_id = self.group_matcher.auto_match_document(doc_id)
+                            if link_id:
+                                print(f"    [MATCH] Auto-vinculado ao grupo {link_id}")
+                        except Exception as e:
+                            print(f"    [AVISO] Auto-match falhou: {e}")
                 
                 # Se for NF-e, extrai duplicatas
                 if segment.doc_type == DocumentType.NFE:

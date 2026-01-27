@@ -57,6 +57,7 @@ from database import (
 from scanner import CognitiveScanner
 from mcmf_reconciler import MCMFReconciler, TransactionIsland, DocumentNode
 from renamer import DocumentRenamer
+from group_matcher import GroupMatcher, DocumentGroup
 
 # Configuracao de logging
 logging.basicConfig(level=logging.INFO)
@@ -278,6 +279,7 @@ class SRDAApplication:
         self.scanner = CognitiveScanner(db=self.db)
         self.reconciler = MCMFReconciler(db=self.db)
         self.renamer = DocumentRenamer(db=self.db)
+        self.group_matcher = GroupMatcher(db=self.db)  # Sprint 4: Conciliation
         
         # Janela principal (com ou sem DnD)
         if DND_AVAILABLE:
@@ -1281,6 +1283,11 @@ class SRDAApplication:
         self.notebook.add(self.email_tab, text=" 📧 Email Monitor ")
         self._build_email_tab()
         
+        # Aba: Conciliação Visual (Sprint 4)
+        self.conciliation_tab = ttk.Frame(self.notebook, padding=5)
+        self.notebook.add(self.conciliation_tab, text=" 🔄 Conciliação ")
+        self._build_conciliation_tab()
+        
         # Botoes de acao
         action_frame = ttk.Frame(right_frame)
         action_frame.pack(fill=X, pady=(10, 0))
@@ -1480,6 +1487,223 @@ class SRDAApplication:
         
         # Start the email pipeline
         self._on_start_email_monitor()
+    
+    # ==========================================================================
+    # CONCILIATION TAB (Sprint 4)
+    # ==========================================================================
+    
+    def _build_conciliation_tab(self):
+        """Build the Conciliation tab for viewing document groups."""
+        # Control buttons frame
+        control_frame = ttk.Frame(self.conciliation_tab)
+        control_frame.pack(fill=X, padx=5, pady=5)
+        
+        ttk.Button(
+            control_frame,
+            text="🔄 Atualizar Grupos",
+            command=self._refresh_conciliation_groups,
+            bootstyle="info"
+        ).pack(side=LEFT, padx=5)
+        
+        ttk.Button(
+            control_frame,
+            text="📦 Arquivar Grupo",
+            command=self._on_archive_selected_group,
+            bootstyle="success"
+        ).pack(side=LEFT, padx=5)
+        
+        ttk.Button(
+            control_frame,
+            text="🔗 Auto-Match Todos",
+            command=self._on_auto_match_all,
+            bootstyle="warning"
+        ).pack(side=LEFT, padx=5)
+        
+        # Stats label
+        self.conciliation_stats = ttk.Label(
+            control_frame, 
+            text="Grupos: 0 | Pendentes: 0 | Completos: 0",
+            bootstyle="info"
+        )
+        self.conciliation_stats.pack(side=RIGHT, padx=5)
+        
+        # TreeView for groups
+        columns = ("link_id", "status", "tipo_docs", "fornecedor", "valor", "data_master")
+        self.groups_tree = ttk.Treeview(
+            self.conciliation_tab, 
+            columns=columns, 
+            show="headings", 
+            bootstyle="info",
+            selectmode="browse"
+        )
+        
+        self.groups_tree.heading("link_id", text="Grupo")
+        self.groups_tree.heading("status", text="Status")
+        self.groups_tree.heading("tipo_docs", text="Documentos")
+        self.groups_tree.heading("fornecedor", text="Fornecedor")
+        self.groups_tree.heading("valor", text="Valor")
+        self.groups_tree.heading("data_master", text="Data Soberana")
+        
+        self.groups_tree.column("link_id", width=60, anchor=CENTER)
+        self.groups_tree.column("status", width=100, anchor=CENTER)
+        self.groups_tree.column("tipo_docs", width=120, anchor=CENTER)
+        self.groups_tree.column("fornecedor", width=180)
+        self.groups_tree.column("valor", width=100, anchor=E)
+        self.groups_tree.column("data_master", width=120, anchor=CENTER)
+        
+        scrollbar = ttk.Scrollbar(self.conciliation_tab, orient=VERTICAL, command=self.groups_tree.yview)
+        self.groups_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.groups_tree.pack(side=LEFT, fill=BOTH, expand=YES, padx=5, pady=5)
+        scrollbar.pack(side=RIGHT, fill=Y, pady=5)
+        
+        # Double-click to show group details
+        self.groups_tree.bind("<Double-1>", self._on_group_double_click)
+    
+    def _refresh_conciliation_groups(self):
+        """Refresh the groups list in the conciliation tab."""
+        # Clear current items
+        for item in self.groups_tree.get_children():
+            self.groups_tree.delete(item)
+        
+        try:
+            groups = self.group_matcher.get_all_groups()
+            unmatched = self.group_matcher.get_unmatched_documents()
+            
+            pending = 0
+            complete = 0
+            
+            for group in groups:
+                # Build doc types string
+                doc_types = []
+                if group.has_nfe:
+                    doc_types.append("📄 NFe")
+                if group.has_boleto:
+                    doc_types.append("💰 Boleto")
+                if group.has_comprovante:
+                    doc_types.append("✅ Comp")
+                tipos_str = " | ".join(doc_types) if doc_types else "❓ Vazio"
+                
+                # Get supplier from first document
+                supplier = ""
+                valor = 0
+                for doc in group.documents:
+                    if doc.supplier_clean:
+                        supplier = doc.supplier_clean[:25]
+                    if doc.amount_cents > 0:
+                        valor = doc.amount_cents
+                
+                # Format value
+                valor_str = f"R$ {valor / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                
+                # Status with emoji
+                if group.is_complete:
+                    status = "✅ Completo"
+                    complete += 1
+                elif group.is_partially_matched:
+                    status = "🟡 Parcial"
+                    pending += 1
+                else:
+                    status = "🔴 Pendente"
+                    pending += 1
+                
+                # Data soberana
+                master_date = group.master_date or "—"
+                if master_date != "—":
+                    master_date = self._iso_to_br(master_date)
+                
+                self.groups_tree.insert("", END, values=(
+                    group.link_id,
+                    status,
+                    tipos_str,
+                    supplier,
+                    valor_str,
+                    master_date
+                ))
+            
+            # Update stats
+            self.conciliation_stats.config(
+                text=f"Grupos: {len(groups)} | Pendentes: {pending} | Completos: {complete} | Órfãos: {len(unmatched)}"
+            )
+            
+            logger.info(f"Refreshed conciliation: {len(groups)} groups, {len(unmatched)} orphans")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing conciliation groups: {e}")
+            self._set_status(f"Erro ao carregar grupos: {e}")
+    
+    def _on_group_double_click(self, event):
+        """Handle double-click on a group to show details."""
+        selection = self.groups_tree.selection()
+        if not selection:
+            return
+        
+        values = self.groups_tree.item(selection[0])['values']
+        if values:
+            link_id = values[0]
+            group = self.group_matcher.get_group_by_link(link_id)
+            
+            if group:
+                # Build details message
+                details = f"Grupo #{link_id}\\n\\n"
+                details += f"Status: {group.status}\\n"
+                details += f"Data Soberana: {group.master_date or 'N/A'}\\n\\n"
+                details += "Documentos:\\n"
+                
+                for doc in group.documents:
+                    valor = f"R$ {doc.amount_cents / 100:.2f}" if doc.amount_cents else "—"
+                    details += f"  • {doc.doc_type}: {doc.supplier_clean or 'N/A'} ({valor})\\n"
+                
+                Messagebox.showinfo(f"Grupo #{link_id}", details, parent=self.root)
+    
+    def _on_archive_selected_group(self):
+        """Archive the selected group."""
+        selection = self.groups_tree.selection()
+        if not selection:
+            Messagebox.showwarning("Aviso", "Selecione um grupo para arquivar.", parent=self.root)
+            return
+        
+        values = self.groups_tree.item(selection[0])['values']
+        if values:
+            link_id = values[0]
+            
+            result = Messagebox.yesno(
+                title="Arquivar Grupo",
+                message=f"Arquivar grupo #{link_id}?\\n\\nOs documentos serão removidos da lista principal.",
+                parent=self.root
+            )
+            
+            if result == "Yes":
+                count = self.db.archive_group(link_id)
+                self._set_status(f"✅ Grupo #{link_id} arquivado ({count} documentos)")
+                self._refresh_conciliation_groups()
+                self._refresh_document_list()
+    
+    def _on_auto_match_all(self):
+        """Attempt to auto-match all unmatched documents."""
+        unmatched = self.group_matcher.get_unmatched_documents()
+        
+        if not unmatched:
+            Messagebox.showinfo("Info", "Nenhum documento sem grupo.", parent=self.root)
+            return
+        
+        result = Messagebox.yesno(
+            title="Auto-Match",
+            message=f"Tentar auto-match para {len(unmatched)} documentos?\\n\\n"
+                    "Isso buscará matches automáticos por valor e fornecedor.",
+            parent=self.root
+        )
+        
+        if result == "Yes":
+            matched = 0
+            for doc in unmatched:
+                link_id = self.group_matcher.auto_match_document(doc.doc_id)
+                if link_id:
+                    matched += 1
+            
+            self._set_status(f"✅ Auto-match: {matched}/{len(unmatched)} documentos vinculados")
+            self._refresh_conciliation_groups()
+            self._refresh_document_list()
     
     def _build_status_bar(self):
         status_bar = ttk.Frame(self.main_container)
