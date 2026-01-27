@@ -4,13 +4,16 @@ Ensemble Voter Module - Hierarchical Voting for 8GB RAM
 
 Implements intelligent voting for data extraction:
 
-1. Hierarchical Priority: Native Text > Regex > Paddle > VLM
+1. Hierarchical Priority: Native Text > Regex > Paddle > VLM > Gemini (fallback)
 2. Regex Veto: Valid CNPJ/CPF/Date checksums override OCR
 3. ConfidenceScorer: Penalizes non-ASCII in numeric fields
 4. REVIEW_REQUIRED: High divergence flags for human review
 5. RapidFuzz for fast similarity (required)
+6. Gemini AI fallback: For high divergence or low confidence cases
 
 Gold Rule: Deterministic validators (checksums) ALWAYS win over OCR.
+Silver Rule: If local OCR agrees, don't call Gemini (save cost).
+Bronze Rule: If divergence high, Gemini arbitrates (Oracle).
 """
 
 import re
@@ -29,6 +32,26 @@ try:
 except ImportError:
     RAPIDFUZZ_AVAILABLE = False
     logger.warning("rapidfuzz not installed - using slow difflib fallback")
+
+# Lazy import for Gemini voter (cloud AI)
+GEMINI_AVAILABLE = False
+GeminiVoter = None
+get_gemini_voter = None
+
+def _ensure_gemini():
+    """Lazy import Gemini voter."""
+    global GEMINI_AVAILABLE, GeminiVoter, get_gemini_voter
+    if GeminiVoter is not None:
+        return GEMINI_AVAILABLE
+    try:
+        from voters.gemini_voter import GeminiVoter as _GV, get_gemini_voter as _get_gv
+        GeminiVoter = _GV
+        get_gemini_voter = _get_gv
+        GEMINI_AVAILABLE = True
+    except ImportError:
+        GEMINI_AVAILABLE = False
+        logger.debug("Gemini voter not available")
+    return GEMINI_AVAILABLE
 
 # CNPJ/CPF regex patterns for veto detection
 CNPJ_PATTERN = re.compile(r'\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}')
@@ -158,6 +181,9 @@ class EnsembleVoter:
         "florence2": 1.5,
         "extract_hybrid": 1.5,
         
+        # Cloud AI (Gemini - high trust when invoked)
+        "gemini": 3.5,
+        
         # Regex without validation
         "regex_specific": 1.2,
         "regex_fallback": 0.8,
@@ -172,8 +198,28 @@ class EnsembleVoter:
     # Divergence threshold for REVIEW_REQUIRED flag
     DIVERGENCE_THRESHOLD = 0.4
     
-    def __init__(self):
+    # Minimum confidence to skip Gemini fallback
+    MIN_CONFIDENCE_NO_GEMINI = 0.85
+    
+    def __init__(self, use_cloud_ai: bool = False):
         self.scorer = ConfidenceScorer()
+        self.use_cloud_ai = use_cloud_ai
+        self._gemini_voter = None
+    
+    @property
+    def gemini_voter(self):
+        """Lazy load Gemini voter."""
+        if not self.use_cloud_ai:
+            return None
+        if self._gemini_voter is None and _ensure_gemini():
+            self._gemini_voter = get_gemini_voter()
+        return self._gemini_voter
+    
+    def set_cloud_ai(self, enabled: bool):
+        """Enable or disable cloud AI fallback."""
+        self.use_cloud_ai = enabled
+        if not enabled:
+            self._gemini_voter = None
     
     def calculate_similarity(self, s1: str, s2: str) -> float:
         """Calculate similarity between two strings (0.0 to 1.0)."""
@@ -316,7 +362,8 @@ class EnsembleVoter:
     def weighted_vote(
         self, 
         candidates: List[VoteCandidate],
-        field_type: str = "any"
+        field_type: str = "any",
+        file_path: Optional[str] = None
     ) -> VoteResult:
         """
         Select best candidate using hierarchical voting.
@@ -325,10 +372,12 @@ class EnsembleVoter:
         1. Valid checksum (VETO power)
         2. Native PDF text
         3. Weighted cluster voting
+        4. Gemini AI fallback (if enabled and divergence high)
         
         Args:
             candidates: List of extraction candidates
             field_type: Type of field (cnpj, cpf, date, amount, any)
+            file_path: Optional path to source file for Gemini fallback
             
         Returns:
             VoteResult with best value and metadata
@@ -368,6 +417,12 @@ class EnsembleVoter:
         needs_review = self.check_divergence(candidates)
         if needs_review:
             logger.warning("High divergence detected - flagging for review")
+            
+            # Try Gemini arbitration if enabled and file path provided
+            if self.gemini_voter and file_path:
+                gemini_result = self._invoke_gemini_arbitration(file_path, field_type)
+                if gemini_result:
+                    return gemini_result
         
         # Step 4: Cluster similar values
         clusters = self._cluster_candidates(candidates)
@@ -488,6 +543,84 @@ class EnsembleVoter:
         # For now, return string with most alphanumeric characters
         best = max(text_list, key=lambda s: sum(c.isalnum() for c in s))
         return best
+    
+    def _invoke_gemini_arbitration(
+        self, 
+        file_path: str, 
+        field_type: str
+    ) -> Optional[VoteResult]:
+        """
+        Invoke Gemini AI to arbitrate when local OCR has high divergence.
+        
+        This is the "Oracle" fallback - only called when local methods disagree.
+        
+        Args:
+            file_path: Path to the source document
+            field_type: Type of field being extracted
+            
+        Returns:
+            VoteResult from Gemini or None if failed
+        """
+        if not self.gemini_voter:
+            return None
+        
+        try:
+            from pathlib import Path
+            if not Path(file_path).exists():
+                logger.warning(f"File not found for Gemini arbitration: {file_path}")
+                return None
+            
+            logger.info(f"Invoking Gemini arbitration for: {file_path}")
+            result = self.gemini_voter.extract(file_path)
+            
+            if not result.success:
+                logger.warning(f"Gemini extraction failed: {result.error}")
+                return None
+            
+            # Extract the relevant field from Gemini result
+            data = result.data
+            value = None
+            
+            if field_type == "amount":
+                value = data.get('amount')
+                if value is not None:
+                    value = str(value)
+            elif field_type == "date":
+                value = data.get('due_date') or data.get('emission_date')
+            elif field_type in ("cnpj", "cpf"):
+                value = data.get('supplier_doc')
+            elif field_type == "supplier":
+                value = data.get('supplier_name')
+            else:
+                # Return full result for general extraction
+                # Pick the most relevant field
+                value = (
+                    data.get('supplier_name') or 
+                    data.get('due_date') or 
+                    str(data.get('amount', ''))
+                )
+            
+            if not value:
+                return None
+            
+            logger.info(f"Gemini arbitration result: {value} (confidence: {result.confidence})")
+            
+            return VoteResult(
+                value=str(value),
+                confidence=result.confidence,
+                source="gemini",
+                needs_review=result.confidence < 0.7,
+                all_candidates=[VoteCandidate(
+                    value=str(value),
+                    confidence=result.confidence,
+                    source="gemini",
+                    weight=self.SOURCE_WEIGHTS.get("gemini", 3.5)
+                )]
+            )
+            
+        except Exception as e:
+            logger.error(f"Gemini arbitration error: {e}")
+            return None
 
 
 # =============================================================================

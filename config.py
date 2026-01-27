@@ -74,3 +74,37 @@ ENV_VARS = {
     "NUMEXPR_NUM_THREADS": str(CPU_THREADS),
     "CUDA_VISIBLE_DEVICES": "", # Force CPU
 }
+
+# =============================================================================
+# GMAIL API CONFIGURATION (Project Cyborg)
+# =============================================================================
+GMAIL_CREDENTIALS_PATH = BASE_DIR / "credentials.json"
+GMAIL_TOKEN_PATH = BASE_DIR / "token.json"
+GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+GMAIL_MAX_RESULTS = 20  # Pagination limit per batch
+GMAIL_LOOKBACK_DAYS = 5  # Days to look back for emails
+
+# =============================================================================
+# GEMINI AI CONFIGURATION (Project Cyborg)
+# =============================================================================
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL_FLASH = "gemini-1.5-flash"  # Fast, cheap (default)
+GEMINI_MODEL_PRO = "gemini-1.5-pro"  # Complex cases fallback
+
+# =============================================================================
+# GMAIL LABELS (Project Cyborg)
+# =============================================================================
+GMAIL_LABELS = {
+    "processed": "SRDA_PROCESSADO",
+    "failed": "SRDA_FALHA_EXTRAÇÃO",
+    "ai_analyzed": "SRDA_IA_ANALISOU",
+    "duplicate": "SRDA_DUPLICADO"
+}
+
+# =============================================================================
+# PROJECT CYBORG DIRECTORIES
+# =============================================================================
+TEMP_DOWNLOADS_DIR = BASE_DIR / "temp_downloads"
+REVIEW_IA_DIR = BASE_DIR / "_Revisão_IA"
+DUPLICATES_DIR = BASE_DIR / "_Duplicados"
+LOGS_DIR = BASE_DIR / "logs"

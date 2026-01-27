@@ -214,6 +214,27 @@ class SRDADatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_corrections_field ON corrections_log(field_name);")
         except:
             pass
+        
+        # Migrations for Project Cyborg (source tracking)
+        self._run_migrations(conn)
+    
+    def _run_migrations(self, conn):
+        """Run database migrations for new columns."""
+        migrations = [
+            # Project Cyborg: Add source tracking to documents
+            ("ALTER TABLE documentos ADD COLUMN source VARCHAR DEFAULT 'manual'", "source"),
+            ("ALTER TABLE documentos ADD COLUMN email_message_id VARCHAR", "email_message_id"),
+            ("ALTER TABLE documentos ADD COLUMN email_subject VARCHAR", "email_subject"),
+        ]
+        
+        for sql, col_name in migrations:
+            try:
+                conn.execute(sql)
+                logger.info(f"Migration: Added column '{col_name}' to documentos")
+            except Exception as e:
+                # Column likely already exists
+                if "already exists" not in str(e).lower() and "duplicate" not in str(e).lower():
+                    logger.debug(f"Migration skipped for '{col_name}': {e}")
 
     # --- Helpers ---
     def _fetchall_as_dict(self, query: str, params: List = []) -> List[Dict]:

@@ -45,7 +45,7 @@ from database import (
 )
 
 # Import Core Logic (SRDA-Rural 2.0)
-from srda_rural_core import OCRSanitizer, FinancialRegexRegistry, DocumentProcessor
+from srda_rural_core import OCRSanitizer, FinancialRegexRegistry, DocumentProcessor, parse_brl_currency
 
 # Importa o EnsembleExtractor para extracao avancada (OCR, GLiNER, etc)
 try:
@@ -361,28 +361,51 @@ class CognitiveScanner:
         known_suppliers = load_known_suppliers_full(db_conn)
         self.processor = DocumentProcessor(known_suppliers)
     
-    def _extract_hints_from_filename(self, filename: str) -> Dict[str, Any]:
-        """Extrai dicas (Data, Fornecedor) do nome do arquivo."""
-        hints = {"date": None, "supplier": None, "entity": None}
-        try:
-            # Padrão esperado: DATA_ENTIDADE_FORNECEDOR_...
-            parts = Path(filename).stem.split('_')
-            if len(parts) >= 3:
-                # Data
-                import re
-                date_match = re.match(r'^(\d{2})[\.\-](\d{2})[\.\-](\d{4})$', parts[0])
-                if date_match:
-                    hints['date'] = f"{date_match.group(3)}-{date_match.group(2)}-{date_match.group(1)}"
-                
-                    # Entidade (Só confia se tiver data válida antes)
-                    if parts[1].upper() in ['VG', 'MV']:
-                        hints['entity'] = parts[1].upper()
-                        
-                    # Fornecedor (Só confia se tiver data válida antes)
-                    hints['supplier'] = parts[2].strip()
-        except Exception:
-            pass
-        return hints
+    @staticmethod
+    def is_text_junk(text: str) -> bool:
+        """Detecta se o texto extraído é lixo (problemas de encoding ou PDF escaneado com OCR ruim)."""
+        if not text: return True
+        clean_text = text.strip()
+        if len(clean_text) < 10: return True
+        
+        # Heurística: se tiver poucos caracteres alfanuméricos em relação ao total
+        alnum_count = sum(1 for c in clean_text if c.isalnum())
+        ratio = alnum_count / len(clean_text)
+        
+        # Se menos de 40% for alfanumérico, provavelmente é lixo (ou tabelas densas, mas arriscado)
+        if ratio < 0.4: return True
+        
+        # Se o texto for predominantemente caracteres repetidos ou símbolos estranhos
+        # (NFs costumam ter palavras como 'Nota', 'Fiscal', 'VALOR', 'CNPJ')
+        sane_keywords = ["NOTA", "FISCAL", "NFE", "CNPJ", "VALOR", "EMISSAO", "VENCIMENTO", "PAGADOR"]
+        if not any(k in clean_text.upper() for k in sane_keywords):
+            # Se não tiver nenhuma palavra comum de NF e o ratio for baixo, é junk
+            if ratio < 0.6: return True
+            
+        return False
+
+    @staticmethod
+    def classify_document(text_content: str) -> str:
+        """Classifica o documento baseado no conteúdo (Sem dependência de nome de arquivo)."""
+        text_upper = text_content.upper()
+        
+        # NFe (Mercadorias)
+        if any(x in text_upper for x in ["DANFE", "NOTA FISCAL ELETRÔNICA", "PROTOCOLO DE AUTORIZAÇÃO DE USO"]):
+            return "NFE"
+        
+        # NFSe (Serviços)
+        if any(x in text_upper for x in ["NFS-E", "NOTA FISCAL DE SERVIÇO", "NOTA FISCAL DE SERVICO", "PREFEITURA", "ISSQN", "PRESTADOR", "TOMADOR", "VALOR LÍQUIDO", "VALOR LIQUIDO"]):
+            return "NFSE"
+        
+        # Boleto Bancário
+        if any(x in text_upper for x in ["RECIBO DO PAGADOR", "AUTENTICAÇÃO MECÂNICA", "AUTENTICACAO MECANICA", "NOSSO NÚMERO", "NOSSO NUMERO", "LINHA DIGITÁVEL", "LINHA DIGITAVEL", "VENCIMENTO", "VALOR DO DOCUMENTO"]):
+            return "BOLETO"
+            
+        # Outros
+        if "EXTRATO" in text_upper: return "EXTRATO"
+        if "COMPROVANTE" in text_upper: return "COMPROVANTE"
+        
+        return "UNKNOWN"
     
     # ==========================================================================
     # VARREDURA DE DIRETORIOS
@@ -726,237 +749,154 @@ class CognitiveScanner:
             "method": "NONE"
         }
 
-        # 0. CONSTANTES & HINTS (Battle Plan Step 102-104)
-        hints = self._extract_hints_from_filename(file_path.name)
-        if hints['date']: 
-            result['due_date'] = hints['date']
-            # Hinting é a verdade absoluta inicial
-            # Mas vamos deixar o confidence baixo por enquanto, ou setar metodo
-            result['method'] = "FILENAME_HINT"
-            
-        if hints['supplier']: 
-            result['supplier_name'] = hints['supplier']
-            result['supplier_clean'] = hints['supplier']
-        if hints['entity']: 
-            from database import EntityTag
-            if hints['entity'] == 'VG': result['entity_tag'] = EntityTag.VG
-            elif hints['entity'] == 'MV': result['entity_tag'] = EntityTag.MV
-
-        # HINTING PRIORITY CHECK:
-        # Se temos hints fortes, já começamos com 'confidence' alto para evitar sobrescrita ruim
-        if result['due_date'] and result['supplier_name']:
-             result['confidence'] = 1.0  # Trust the human label!
-
         try:
-            # --- PATH 1: DIGITAL (Rápido) ---
-            # Usa SpatialExtractor para extração geométrica precisa
-            spatial = get_spatial_extractor()
-            if spatial.load_pdf(file_path, page_num):
-                # Extração espacial completa (incluindo CNPJ inteligente)
-                spatial_results = spatial.extract_all()
-                
-                # Consolidar resultados
-                if 'amount' in spatial_results and not result['amount_cents']:
-                    val_str = spatial_results['amount'].value
-                    result['amount_cents'] = SRDADatabase.amount_to_cents(val_str)
-                    # Only update confidence if we actually used the spatial result
-                    if result['confidence'] < spatial_results['amount'].confidence:
-                        result['confidence'] = spatial_results['amount'].confidence
-                
-                if 'due_date' in spatial_results and not result['due_date']:
-                    result['due_date'] = self._parse_date(spatial_results['due_date'].value)
-                
-                if 'emission_date' in spatial_results and not result['emission_date']:
-                    result['emission_date'] = self._parse_date(spatial_results['emission_date'].value)
-                
-                if 'cnpj_emissor' in spatial_results and not result['cnpj']:
-                    result['cnpj'] = spatial_results['cnpj_emissor'].value
-                
-                result['extraction_path'] = "digital_spatial"
-                
-                # Se confiança alta e valor encontrado, retorna (Fast Path Success), 
-                # MAS APENAS se tivermos o fornecedor!
-                if result['confidence'] > 0.85 and result['amount_cents'] > 0 and (result['supplier_name'] or result['supplier_clean']):
-                    # Sanitiza antes de retornar
-                    e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
-                    result['emission_date'] = e_date
-                    result['due_date'] = d_date
-                    # Ensure both keys exist
-                    result['supplier_clean'] = result.get('supplier_clean') or result.get('supplier_name')
-                    return result
+            # 1. Carrega o Extrator Espacial (Digital Path)
+            spatial = get_spatial_extractor(str(file_path))
+            if not spatial:
+                raise ValueError("Falha ao inicializar SpatialExtractor")
 
-            # --- PATH 2: OCR (Paddle - Robusto) ---
-            # Se falhou digital, Paddle é obrigatório se quisermos evitar VLM
-            ocr_text = ""
+            full_text = " ".join([w[4] for w in spatial.words])
             
-            # Tenta usar o Ensemble OCR (se disponível e carregado)
-            if self.ensemble and getattr(self.ensemble, 'ocr_voter', None):
-                try:
-                    ocr_res = self.ensemble.ocr_voter.extract_structured(file_path, page_num)
-                    ocr_text = ocr_res.get('text', '')
-                    result['extraction_path'] = "ocr_ensemble"
-                except Exception as e:
-                    logger.debug(f"Ensemble OCR indisponível: {e}")
+            # 1.1 Verifica se o texto digital é lixo
+            if self.is_text_junk(full_text):
+                logger.warning(f"Texto digital detectado como 'junk' para {file_path.name}. Forçando OCR path.")
+                # Resetamos full_text para forçar falha no classificador digital
+                full_text = ""
+            
+            # 2. Classificação do Documento (SEM ADIVINHAÇÃO)
+            doc_class = self.classify_document(full_text)
+            result['doc_type'] = doc_class
+            if full_text:
+                logger.info(f"Documento classificado como: {doc_class} ({file_path.name})")
 
-            # Fallback manual para Paddle se Ensemble falhar
-            if not ocr_text:
-                try:
-                    from paddle_voter import get_paddle_voter
-                    pv = get_paddle_voter()
-                    # Conversão rápida para imagem
-                    doc = fitz.open(str(file_path))
-                    page = doc[page_num]
-                    # 1.5x zoom = 150 DPI
-                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                    from PIL import Image
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    ocr_text = pv.extract_text(img)
-                    result['extraction_path'] = "ocr_fallback"
-                    doc.close()
-                except ImportError:
-                    pass # Sem paddle instalado
-                except Exception as e:
-                    logger.warning(f"Falha no Paddle OCR fallback: {e}")
+            # --- PATH 1: DIGITAL (SPATIAL EXTRACTION) ---
+            raw_amount = None
+            
+            # Se não for UNKNOWN e tivermos texto bom, tenta extração espacial
+            if doc_class != "UNKNOWN":
+                # Extração de Valor baseada em tipo
+                if doc_class == "NFE":
+                    raw_amount = spatial.extract_value_right("VALOR TOTAL DA NOTA") or \
+                                 spatial.extract_value_below("VALOR TOTAL DA NOTA")
+                elif doc_class == "BOLETO":
+                    raw_amount = spatial.extract_value_below("Valor do Documento") or \
+                                 spatial.extract_value_below("Valor Cobrado")
+                elif doc_class == "NFSE":
+                    raw_amount = spatial.extract_value_right("VALOR LÍQUIDO") or \
+                                 spatial.extract_value_right("TOTAL DA NOTA")
+                
+                # Converte Valor
+                if raw_amount:
+                    amount_float = parse_brl_currency(raw_amount)
+                    if amount_float > 0:
+                        result['amount_cents'] = int(round(amount_float * 100))
+                        result['confidence'] = 0.95
+                        result['extraction_path'] = "digital_spatial"
+                        result['method'] = f"SPATIAL_{doc_class}"
 
-            if ocr_text:
-                # Extração Regex sobre OCR
-                amt = self.extract_amount(ocr_text)
-                if amt > 0 and result['amount_cents'] == 0:
-                    result['amount_cents'] = amt
-                    if result['confidence'] < 0.7: result['confidence'] = 0.7
+                # Extração de CNPJ Espacial
+                if not result['cnpj']:
+                    result['cnpj'] = spatial.extract_cnpj_near("CNPJ")
                 
-                dd = self.extract_due_date(ocr_text)
-                if dd and not result['due_date']: result['due_date'] = dd
-                
-                ed = self.extract_emission_date(ocr_text)
-                if ed and not result['emission_date']: result['emission_date'] = ed
-                
-                # CNPJ via Regex
-                cnpj_match = REGEX_PATTERNS["cnpj"].search(ocr_text)
-                if cnpj_match and not result['cnpj']:
-                    result['cnpj'] = cnpj_match.group(1)
-                
-                # --- FIX: Explicitly Extract Supplier from OCR Text ---
+                # Extração de Nome do Fornecedor (Cabeçalho)
                 if not result['supplier_name']:
-                    # Tenta inferir doc_type para ajudar
-                    doc_type_enum = result.get('doc_type_enum')
-                    
-                    supp = self.extract_supplier(ocr_text, doc_type_enum)
-                    if supp:
-                        result['supplier_name'] = supp
-                        # Se achou fornecedor no OCR, aumenta confiança
-                        if result['confidence'] < 0.8: result['confidence'] = 0.8
-                
-                # Se a confiança for aceitável E TEMOS FORNECEDOR, PARE AQUI.
-                if result['confidence'] >= 0.7 and (result['supplier_name'] or result['supplier_clean']) and result['amount_cents'] > 0: 
-                    # Sanitiza antes de retornar
-                    e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
-                    result['emission_date'] = e_date
-                    result['due_date'] = d_date
-                    # Ensure both keys exist
-                    result['supplier_clean'] = result.get('supplier_clean') or result.get('supplier_name')
-                    return result
+                    cand_supp = spatial.extract_supplier_header()
+                    if cand_supp and not self.is_text_junk(cand_supp):
+                        result['supplier_name'] = cand_supp
 
-            # --- PATH 3: VLM (Florence-2 - Último Recurso) ---
-            # Protegido por Try/Except específico para não crashar o loop
-            # Battle Plan Step 110: Skip if hints are good enough AND we found an amount
-            can_skip_vlm = (hints['supplier'] and hints['date'] and result['amount_cents'] > 0) or \
-                          (result['confidence'] >= 0.7 and (result['supplier_name'] or result['supplier_clean']) and result['amount_cents'] > 0)
-            
-            print(f"DEBUG: VLM Skip Check. HintsSup={hints['supplier']}, HintsDate={hints['date']}")
-            print(f"DEBUG: Conf={result['confidence']}, SupName={result['supplier_name']}, Amt={result['amount_cents']}")
-            print(f"DEBUG: can_skip_vlm={can_skip_vlm}")
+            # Fallback para Regex sobre o Texto Digital Completo (se não for junk)
+            if full_text and result['amount_cents'] > 0:
+                if not result['due_date']:
+                    result['due_date'] = self.extract_due_date(full_text)
+                if not result['emission_date']:
+                    result['emission_date'] = self.extract_emission_date(full_text)
+                if not result['supplier_name']:
+                    result['supplier_name'] = self.extract_supplier(full_text)
 
-            if not can_skip_vlm:
+            # --- PATH 2: OCR (MÍNIMO REGRESSO) ---
+            # Se ainda faltar Valor ou Fornecedor, a extração pesada (OCR/Surya) entra em cena
+            if result['amount_cents'] == 0 or not result['supplier_name']:
+                if self.ensemble:
+                    try:
+                        logger.info(f"Iniciando Path 2 (Ensemble OCR) para {file_path.name}")
+                        ensemble_res = self.ensemble.extract_from_pdf(str(file_path))
+                        
+                        # Mapeia resultados do Ensemble
+                        if ensemble_res.amount_cents > 0 and result['amount_cents'] == 0:
+                            result['amount_cents'] = ensemble_res.amount_cents
+                            result['confidence'] = max(result['confidence'], 0.85)
+                            result['extraction_path'] = "ocr_ensemble"
+                        
+                        if not result['supplier_name'] and ensemble_res.fornecedor:
+                            result['supplier_name'] = ensemble_res.fornecedor
+                            
+                        if not result['cnpj'] and ensemble_res.access_key:
+                            # Tenta extrair CNPJ da chave se disponível no ensemble
+                            pass 
+                            
+                        if not result['due_date']: result['due_date'] = ensemble_res.due_date
+                        if not result['emission_date']: result['emission_date'] = ensemble_res.emission_date
+                        
+                        # Se o ensemble obteve texto limpo, tenta re-classificar se for UNKNOWN
+                        if result['doc_type'] == "UNKNOWN" and ensemble_res.doc_type:
+                            result['doc_type'] = ensemble_res.doc_type.value
+                            
+                    except Exception as e:
+                        logger.warning(f"Erro no Path 2 (Ensemble): {e}")
+
+            # --- PATH 3: VLM (ULTIMATO) ---
+            if result['amount_cents'] == 0 or not result['supplier_name']:
                 try:
-                    # Só carrega se realmente necessário
-                    logger.info(f"Acionando VLM (Heavy Path) para {file_path.name}")
-                    
+                    logger.warning(f"Acionando VLM para {file_path.name} - Informações críticas ausentes")
                     florence = get_florence2_voter()
-                    
-                    # Extrai texto com regions
                     vlm_res = florence.extract_from_pdf(str(file_path), page_num)
-                    
                     if 'text' in vlm_res:
-                        vlm_text = vlm_res['text']
-                        
-                        # Re-aplica regex sobre texto superior do VLM
-                        amt_vlm = self.extract_amount(vlm_text)
-                        if amt_vlm > 0:
-                            result['amount_cents'] = amt_vlm
-                            result['confidence'] = 0.6  # Confiança menor pois é expensive
-                            result['extraction_path'] = "vlm_florence"
-                        
-                        # Tenta extrair fornecedor do VLM também
-                        if not result['supplier_name']:
-                            supp_vlm = self.extract_supplier(vlm_text)
-                            if supp_vlm:
-                                result['supplier_name'] = supp_vlm
-                                result['confidence'] = 0.85 # VLM + Regex é forte
-                        
-                        if not result['due_date']:
-                            result['due_date'] = self.extract_due_date(vlm_text)
-                        
-                        if not result['emission_date']:
-                            result['emission_date'] = self.extract_emission_date(vlm_text)
-                
-                except AttributeError as ae:
-                    # Captura o erro específico do SDPA se a correção do ponto 1 falhar
-                    logger.error(f"Erro de compatibilidade no Florence-2: {ae}")
-                    result['error'] = "Florence-2 Incompatible"
+                        v_text = vlm_res['text']
+                        if result['amount_cents'] == 0:
+                            amt_vlm = self.extract_amount(v_text)
+                            if amt_vlm > 0:
+                                result['amount_cents'] = amt_vlm
+                                result['confidence'] = 0.6
+                                result['extraction_path'] = "vlm_florence_final"
+                        if not result['supplier_name']: result['supplier_name'] = self.extract_supplier(v_text)
                 except Exception as e:
-                    logger.error(f"Erro genérico no VLM: {e}")
-            else:
-                logger.info("VLM pulado (High Confidence/Hints)")
-                
+                    logger.error(f"Falha crítica no VLM: {e}")
+
         except Exception as e:
-            logger.critical(f"Erro catastrófico no arquivo {file_path}: {e}")
+            logger.critical(f"Falha catastrófica em {file_path.name}: {e}")
             result["error"] = str(e)
             import traceback
             logger.debug(traceback.format_exc())
 
-        # --- FINAL: SANITIZAÇÃO LÓGICA ---
-        # Aplica a correção de datas invertidas antes de retornar
+        # --- FINALIZAÇÃO E VALIDAÇÃO ---
+        # Sanitiza datas
         e_date, d_date = sanitize_dates(result.get('emission_date'), result.get('due_date'))
         result['emission_date'] = e_date
         result['due_date'] = d_date
         
-        # Identificação de entidade se faltar
-        if not result['entity_tag']:
-            # Tenta inferir pelo CNPJ extraído
-            if result['cnpj']:
-                 # Lógica simplificada - poderia usar DB mas por segurança apenas logamos
-                 pass
-
-        # --- FINAL: CROSS VALIDATION (Battle Plan Step 112-114) ---
-        # Orquestra validação entre CNPJ extraído e Nome (seja do OCR ou Hint)
-        
-        # Determina o melhor nome candidato
-        candidate_name = result['supplier_name'] or hints['supplier'] or ""
+        # Cross Validation (Fornecedor/CNPJ)
+        candidate_name = result['supplier_name'] or ""
         candidate_cnpj = result['cnpj'] or ""
         
-        # Só valida se tivermos info mínima
         if candidate_name or candidate_cnpj:
             val_res = self.processor.cross_validate_entity(candidate_name, candidate_cnpj)
-            
-            # Aplica resultado da validação
             if val_res['status'] != "REJECTED":
                 result['supplier_name'] = val_res['final_name']
                 result['supplier_clean'] = val_res['final_name']
                 result['cnpj'] = val_res['final_cnpj']
                 result['method'] = val_res['method']
                 result['review_needed'] = val_res.get('review_needed', False)
-                # Boost confidence se foi aprovado
                 if val_res['status'] == "APPROVED":
                     result['confidence'] = max(result['confidence'], 0.95)
             else:
-                 # Rejeitado ou não encontrado. Mantém o que tem mas marca review.
-                 if not result['supplier_name']:
-                     result['supplier_name'] = candidate_name # Mantem original se não validou
-                 
-                 result['supplier_clean'] = result['supplier_name']
-                 result['review_needed'] = True
-        
+                result['supplier_clean'] = result['supplier_name']
+                result['review_needed'] = True
+
+        # Se após tudo não tiver o valor, marca erro
+        if result['amount_cents'] == 0:
+             result['error'] = "VALOR_NAO_ENCONTRADO"
+             result['review_needed'] = True
+
         return result
     
     # ==========================================================================

@@ -220,3 +220,30 @@ class DocumentProcessor:
                     }
         
         return result
+
+def parse_brl_currency(text: str) -> float:
+    """
+    Transforma lixo de OCR ("R$ 2.843,29", "2 843.29", "2.843,29") em float (2843.29).
+    Retorna 0.0 se falhar, mas o scanner deve tratar 0.0 como ERRO.
+    """
+    if not text: return 0.0
+    
+    # 1. Limpeza pesada: Deixa apenas números, vírgula e ponto
+    clean = re.sub(r"[^0-9,.]", "", text)
+    
+    # 2. Caso difícil: OCR leu "2.843.29" (dois pontos) ou "2,843,29" (duas vírgulas)
+    # Assumimos que o ÚLTIMO separador é o decimal.
+    if clean.count('.') + clean.count(',') >= 2:
+        # Remove todos os separadores, exceto os últimos 3 caracteres
+        prefix = clean[:-3]
+        suffix = clean[-3:]
+        prefix = re.sub(r"[,.]", "", prefix) # Remove separadores de milhar
+        clean = prefix + suffix
+        
+    # 3. Padronização final: Troca vírgula decimal por ponto
+    clean = clean.replace(",", ".")
+    
+    try:
+        return float(clean)
+    except:
+        return 0.0

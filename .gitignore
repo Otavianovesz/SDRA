@@ -75,3 +75,30 @@ stress_test.py
 validate_*.py
 analyze_failures.py
 generate_ground_truth.py
+
+# Credentials and Tokens
+credentials.json
+token.json
+.env
+
+# Logs and Debug outputs
+debug_log_*.txt
+extraction_test_log_*.txt
+debug_output.txt
+logs/
+
+# Test results and samples
+extraction_test_results.json
+extraction_test_sample.json
+known_suppliers_test.json
+
+# Project specific folders
+temp_downloads/
+verify_tmp/
+Temp/
+Quarentena/
+Processed/
+_backup_pre_fix/
+_archive/
+_backup_pre_fix/
+_backup_pre_fix/

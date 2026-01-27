@@ -1271,6 +1271,11 @@ class SRDAApplication:
         self.graph_text = tk.Text(self.graph_tab, wrap=WORD, font=("Consolas", 10))
         self.graph_text.pack(fill=BOTH, expand=YES)
         
+        # Aba: Email Monitor (Project Cyborg)
+        self.email_tab = ttk.Frame(self.notebook, padding=5)
+        self.notebook.add(self.email_tab, text=" 📧 Email Monitor ")
+        self._build_email_tab()
+        
         # Botoes de acao
         action_frame = ttk.Frame(right_frame)
         action_frame.pack(fill=X, pady=(10, 0))
@@ -1280,6 +1285,181 @@ class SRDAApplication:
         ttk.Button(action_frame, text="Excluir", bootstyle="danger-outline", command=self._on_delete_click, width=10).pack(side=RIGHT)
         
         self._show_no_selection()
+    
+    def _build_email_tab(self):
+        """Build the Email Monitor tab for Project Cyborg."""
+        # Control buttons frame
+        control_frame = ttk.Frame(self.email_tab)
+        control_frame.pack(fill=X, padx=5, pady=5)
+        
+        self.btn_start_email = ttk.Button(
+            control_frame,
+            text="▶ Iniciar Monitoramento",
+            command=self._on_start_email_monitor,
+            bootstyle="success"
+        )
+        self.btn_start_email.pack(side=LEFT, padx=5)
+        
+        self.btn_stop_email = ttk.Button(
+            control_frame,
+            text="⏹ Parar",
+            command=self._on_stop_email_monitor,
+            bootstyle="danger",
+            state=DISABLED
+        )
+        self.btn_stop_email.pack(side=LEFT, padx=5)
+        
+        # Token counter
+        self.lbl_gemini_tokens = ttk.Label(
+            control_frame,
+            text="Tokens Gemini: 0",
+            bootstyle="info"
+        )
+        self.lbl_gemini_tokens.pack(side=RIGHT, padx=10)
+        
+        # Stats labels
+        self.lbl_email_stats = ttk.Label(
+            control_frame,
+            text="Emails: 0 | Docs: 0",
+            bootstyle="secondary"
+        )
+        self.lbl_email_stats.pack(side=RIGHT, padx=10)
+        
+        # Log console
+        log_frame = ttk.LabelFrame(self.email_tab, text="Console de Log", padding=5)
+        log_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+        
+        # Text widget with scrollbar
+        log_scroll = ttk.Scrollbar(log_frame)
+        log_scroll.pack(side=RIGHT, fill=Y)
+        
+        self.email_log = tk.Text(
+            log_frame,
+            wrap=WORD,
+            height=15,
+            bg='#1e1e1e',
+            fg='#ffffff',
+            font=('Consolas', 10),
+            yscrollcommand=log_scroll.set
+        )
+        self.email_log.pack(fill=BOTH, expand=YES)
+        log_scroll.config(command=self.email_log.yview)
+        
+        # Configure log colors
+        self.email_log.tag_config('info', foreground='#3498db')
+        self.email_log.tag_config('success', foreground='#2ecc71')
+        self.email_log.tag_config('warning', foreground='#f39c12')
+        self.email_log.tag_config('error', foreground='#e74c3c')
+        self.email_log.tag_config('gemini', foreground='#9b59b6')
+        self.email_log.tag_config('timestamp', foreground='#7f8c8d')
+        
+        # Initial message
+        self._email_log_message("Pipeline de email pronto. Clique 'Iniciar Monitoramento' para começar.", 'info')
+        
+        # Pipeline reference
+        self._email_pipeline = None
+        self._email_thread = None
+        self._gemini_total_tokens = 0
+    
+    def _email_log_message(self, message: str, level: str = 'info'):
+        """Add a message to the email log console."""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        
+        self.email_log.insert(END, f"[{timestamp}] ", 'timestamp')
+        self.email_log.insert(END, f"{message}\n", level)
+        self.email_log.see(END)
+    
+    def _on_start_email_monitor(self):
+        """Start email monitoring pipeline."""
+        if self._email_thread and self._email_thread.is_alive():
+            self._email_log_message("Pipeline já está em execução!", 'warning')
+            return
+        
+        # Update UI
+        self.btn_start_email.config(state=DISABLED)
+        self.btn_stop_email.config(state=NORMAL)
+        
+        self._email_log_message("Iniciando pipeline de email...", 'info')
+        
+        # Start pipeline in background thread
+        self._email_thread = threading.Thread(target=self._run_email_pipeline, daemon=True)
+        self._email_thread.start()
+    
+    def _on_stop_email_monitor(self):
+        """Stop email monitoring pipeline."""
+        if self._email_pipeline:
+            self._email_pipeline.stop()
+            self._email_log_message("Solicitando parada do pipeline...", 'warning')
+        
+        self.btn_start_email.config(state=NORMAL)
+        self.btn_stop_email.config(state=DISABLED)
+    
+    def _run_email_pipeline(self):
+        """Run email pipeline in background thread."""
+        try:
+            from email_pipeline import EmailPipeline, ProcessingStatus
+            
+            def progress_callback(message, current, total):
+                self.root.after(0, lambda: self._email_log_message(message, 'info'))
+                if total > 0:
+                    stats_text = f"Emails: {current}/{total}"
+                    self.root.after(0, lambda: self.lbl_email_stats.config(text=stats_text))
+            
+            self._email_pipeline = EmailPipeline(
+                db=self.db,
+                use_cloud_ai=True,
+                progress_callback=progress_callback
+            )
+            
+            results = self._email_pipeline.process_pending_emails(max_emails=20)
+            
+            # Log results
+            success_count = sum(1 for r in results if r.status == ProcessingStatus.SUCCESS)
+            failed_count = sum(1 for r in results if r.status == ProcessingStatus.FAILED)
+            tokens_used = sum(r.gemini_tokens_used for r in results)
+            
+            self._gemini_total_tokens += tokens_used
+            
+            # Update UI
+            self.root.after(0, lambda: self._email_log_message(
+                f"Pipeline concluído: {success_count} sucesso, {failed_count} falhas",
+                'success' if failed_count == 0 else 'warning'
+            ))
+            self.root.after(0, lambda: self.lbl_gemini_tokens.config(
+                text=f"Tokens Gemini: {self._gemini_total_tokens:,}"
+            ))
+            
+            # Log individual results
+            for result in results[:10]:  # Show first 10
+                status_icon = {
+                    ProcessingStatus.SUCCESS: "✅",
+                    ProcessingStatus.FAILED: "❌",
+                    ProcessingStatus.SKIPPED: "⏭️",
+                    ProcessingStatus.DUPLICATE: "🔄"
+                }.get(result.status, "❓")
+                
+                level = 'success' if result.status == ProcessingStatus.SUCCESS else 'error'
+                if result.gemini_tokens_used > 0:
+                    level = 'gemini'
+                
+                self.root.after(0, lambda r=result, i=status_icon, l=level: 
+                    self._email_log_message(f"{i} {r.subject[:50]}...", l))
+            
+            # Refresh document list
+            self.root.after(0, self._refresh_all)
+            
+        except ImportError as e:
+            self.root.after(0, lambda: self._email_log_message(
+                f"Módulo não encontrado: {e}. Instale as dependências do Project Cyborg.",
+                'error'
+            ))
+        except Exception as e:
+            self.root.after(0, lambda: self._email_log_message(f"Erro: {e}", 'error'))
+            logger.exception("Email pipeline error")
+        finally:
+            self.root.after(0, lambda: self.btn_start_email.config(state=NORMAL))
+            self.root.after(0, lambda: self.btn_stop_email.config(state=DISABLED))
+
     
     def _build_status_bar(self):
         status_bar = ttk.Frame(self.main_container)
