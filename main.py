@@ -100,6 +100,170 @@ DOC_ICONS = {
 
 
 # ==============================================================================
+# EMAIL CARD (Sprint 6 - Visual Dashboard)
+# ==============================================================================
+
+class EmailCard(ttk.Frame):
+    """
+    Card visual para email na triagem.
+    
+    Layout:
+    [Status Icon] [Content Icons] [Summary from AI] [Actions]
+    🟢            📄 PDF | 🔗 Link   "Agro Baggio - R$ 2.843,29"
+    """
+    
+    STATUS_CONFIG = {
+        'ready': {'icon': '🟢', 'style': 'success', 'text': 'Pronto'},
+        'warning': {'icon': '🟡', 'style': 'warning', 'text': 'Atenção'},
+        'error': {'icon': '🔴', 'style': 'danger', 'text': 'Erro'},
+        'pending': {'icon': '🔵', 'style': 'info', 'text': 'Pendente'},
+        'scheduled': {'icon': '⚠️', 'style': 'warning', 'text': 'Agendamento'},
+    }
+    
+    CONTENT_ICONS = {
+        'pdf': '📄',
+        'xml': '⚙️',
+        'link': '🔗',
+        'attachment': '📎',
+        'image': '🖼️',
+    }
+    
+    def __init__(self, parent, email_data: Dict[str, Any], on_process=None, on_view=None):
+        """
+        Creates an email card.
+        
+        Args:
+            parent: Parent widget
+            email_data: Dict with keys:
+                - subject: Email subject
+                - sender: Sender email
+                - date: Date string
+                - status: 'ready', 'warning', 'error', 'pending', 'scheduled'
+                - content_types: List of 'pdf', 'xml', 'link', 'attachment'
+                - summary: AI extracted summary (supplier, value, etc)
+                - is_scheduled: If True, shows scheduling warning
+            on_process: Callback when process button clicked
+            on_view: Callback when view button clicked
+        """
+        # Determine style based on status
+        status = email_data.get('status', 'pending')
+        if email_data.get('is_scheduled'):
+            status = 'scheduled'
+        
+        config = self.STATUS_CONFIG.get(status, self.STATUS_CONFIG['pending'])
+        
+        super().__init__(parent, bootstyle=config['style'], padding=8)
+        
+        self.email_data = email_data
+        self.on_process = on_process
+        self.on_view = on_view
+        
+        self._build_ui(config)
+    
+    def _build_ui(self, config: Dict):
+        """Build the card UI."""
+        # Main horizontal layout
+        self.columnconfigure(1, weight=1)
+        
+        # Column 0: Status Icon
+        status_label = ttk.Label(
+            self,
+            text=config['icon'],
+            font=('Segoe UI Emoji', 16)
+        )
+        status_label.grid(row=0, column=0, rowspan=2, padx=(0, 10), sticky=W)
+        
+        # Column 1: Content (subject, details)
+        content_frame = ttk.Frame(self)
+        content_frame.grid(row=0, column=1, sticky=EW)
+        content_frame.columnconfigure(0, weight=1)
+        
+        # Subject line with content icons
+        subject_frame = ttk.Frame(content_frame)
+        subject_frame.pack(fill=X)
+        
+        # Content type icons
+        content_types = self.email_data.get('content_types', [])
+        icons_text = ' '.join([self.CONTENT_ICONS.get(ct, '') for ct in content_types])
+        if icons_text:
+            ttk.Label(
+                subject_frame,
+                text=icons_text,
+                font=('Segoe UI Emoji', 10)
+            ).pack(side=LEFT, padx=(0, 5))
+        
+        # Subject
+        subject = self.email_data.get('subject', 'Sem assunto')[:50]
+        ttk.Label(
+            subject_frame,
+            text=subject,
+            font=('Helvetica', 10, 'bold')
+        ).pack(side=LEFT, fill=X, expand=YES)
+        
+        # Details line (sender, date, summary)
+        details_frame = ttk.Frame(content_frame)
+        details_frame.pack(fill=X, pady=(2, 0))
+        
+        sender = self.email_data.get('sender', '')[:30]
+        date = self.email_data.get('date', '')
+        ttk.Label(
+            details_frame,
+            text=f"{sender} • {date}",
+            font=('Helvetica', 9),
+            bootstyle='secondary'
+        ).pack(side=LEFT)
+        
+        # AI Summary (if available)
+        summary = self.email_data.get('summary', '')
+        if summary:
+            ttk.Label(
+                details_frame,
+                text=f" | {summary[:40]}",
+                font=('Helvetica', 9, 'italic'),
+                bootstyle='info'
+            ).pack(side=LEFT)
+        
+        # Scheduling warning
+        if self.email_data.get('is_scheduled'):
+            ttk.Label(
+                content_frame,
+                text="⚠️ Possível Agendamento - Verificar antes de processar",
+                font=('Helvetica', 9, 'bold'),
+                bootstyle='warning'
+            ).pack(fill=X, pady=(3, 0))
+        
+        # Column 2: Action buttons
+        action_frame = ttk.Frame(self)
+        action_frame.grid(row=0, column=2, rowspan=2, padx=(10, 0), sticky=E)
+        
+        if self.on_view:
+            ttk.Button(
+                action_frame,
+                text="👁",
+                command=self._on_view_click,
+                bootstyle='info-outline',
+                width=3
+            ).pack(side=LEFT, padx=2)
+        
+        if self.on_process:
+            ttk.Button(
+                action_frame,
+                text="▶",
+                command=self._on_process_click,
+                bootstyle='success-outline',
+                width=3
+            ).pack(side=LEFT, padx=2)
+    
+    def _on_view_click(self):
+        if self.on_view:
+            self.on_view(self.email_data)
+    
+    def _on_process_click(self):
+        if self.on_process:
+            self.on_process(self.email_data)
+
+
+# ==============================================================================
 # DIALOG DE EDICAO
 # ==============================================================================
 
@@ -1321,6 +1485,15 @@ class SRDAApplication:
         )
         self.btn_stop_email.pack(side=LEFT, padx=5)
         
+        # Sync Now button (Sprint 6)
+        self.btn_sync_now = ttk.Button(
+            control_frame,
+            text="🔄 Sincronizar Agora",
+            command=self._on_gmail_sync_click,
+            bootstyle="info"
+        )
+        self.btn_sync_now.pack(side=LEFT, padx=5)
+        
         # Token counter
         self.lbl_gemini_tokens = ttk.Label(
             control_frame,
@@ -1337,9 +1510,33 @@ class SRDAApplication:
         )
         self.lbl_email_stats.pack(side=RIGHT, padx=10)
         
-        # Log console
-        log_frame = ttk.Labelframe(self.email_tab, text="Console de Log", padding=5)
-        log_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+        # Main content area (split between triage and log)
+        content_pane = ttk.PanedWindow(self.email_tab, orient=VERTICAL)
+        content_pane.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+        
+        # === TOP: Email Triage Area (Sprint 6) ===
+        triage_frame = ttk.Labelframe(content_pane, text=" Triagem de Emails ", padding=5)
+        content_pane.add(triage_frame, weight=60)
+        
+        # Scrollable area for email cards
+        self.email_cards_scroll = ScrolledFrame(triage_frame, autohide=True)
+        self.email_cards_scroll.pack(fill=BOTH, expand=YES)
+        self.email_cards_container = self.email_cards_scroll
+        
+        # Empty state message
+        self.email_empty_label = ttk.Label(
+            self.email_cards_container,
+            text="📭 Nenhum email na triagem.\n\nClique em 'Sincronizar Agora' para buscar emails do Gmail.",
+            font=('Helvetica', 11),
+            anchor=CENTER,
+            justify=CENTER,
+            bootstyle='secondary'
+        )
+        self.email_empty_label.pack(expand=YES, pady=50)
+        
+        # === BOTTOM: Log Console ===
+        log_frame = ttk.Labelframe(content_pane, text=" Console de Log ", padding=5)
+        content_pane.add(log_frame, weight=40)
         
         # Text widget with scrollbar
         log_scroll = ttk.Scrollbar(log_frame)
@@ -1348,7 +1545,7 @@ class SRDAApplication:
         self.email_log = tk.Text(
             log_frame,
             wrap=WORD,
-            height=15,
+            height=8,
             bg='#1e1e1e',
             fg='#ffffff',
             font=('Consolas', 10),
@@ -1366,12 +1563,56 @@ class SRDAApplication:
         self.email_log.tag_config('timestamp', foreground='#7f8c8d')
         
         # Initial message
-        self._email_log_message("Pipeline de email pronto. Clique 'Iniciar Monitoramento' para começar.", 'info')
+        self._email_log_message("Pipeline de email pronto. Clique 'Sincronizar Agora' para começar.", 'info')
         
         # Pipeline reference
         self._email_pipeline = None
         self._email_thread = None
         self._gemini_total_tokens = 0
+        self._email_cards = []  # Track email cards
+    
+    def _add_email_card(self, email_data: Dict[str, Any]):
+        """Add an EmailCard to the triage area."""
+        # Hide empty state if first card
+        if self._email_cards:
+            pass
+        else:
+            self.email_empty_label.pack_forget()
+        
+        card = EmailCard(
+            self.email_cards_container,
+            email_data,
+            on_process=self._on_process_email_card,
+            on_view=self._on_view_email_card
+        )
+        card.pack(fill=X, padx=5, pady=3)
+        self._email_cards.append(card)
+        
+        return card
+    
+    def _clear_email_cards(self):
+        """Remove all email cards from triage area."""
+        for card in self._email_cards:
+            card.destroy()
+        self._email_cards = []
+        self.email_empty_label.pack(expand=YES, pady=50)
+    
+    def _on_process_email_card(self, email_data: Dict):
+        """Handle processing an individual email card."""
+        self._email_log_message(f"Processando: {email_data.get('subject', 'N/A')}", 'info')
+        # TODO: Integrate with scanner/pipeline
+    
+    def _on_view_email_card(self, email_data: Dict):
+        """Handle viewing an individual email card."""
+        subject = email_data.get('subject', 'N/A')
+        sender = email_data.get('sender', 'N/A')
+        summary = email_data.get('summary', 'Sem resumo disponível')
+        
+        Messagebox.showinfo(
+            title=f"Email: {subject[:30]}",
+            message=f"De: {sender}\n\n{summary}",
+            parent=self.root
+        )
     
     def _email_log_message(self, message: str, level: str = 'info'):
         """Add a message to the email log console."""
