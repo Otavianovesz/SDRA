@@ -308,14 +308,17 @@ class SRDADatabase:
         return self._fetchall_as_dict("SELECT * FROM documentos WHERE entity_tag = ?", [entity.value])
     
     # --- Transaction methods ---
-    def insert_transaction(self, doc_id: int, amount_cents: int, entidade_pagadora: EntityTag,
+    def insert_transaction(self, doc_id: int, amount_cents: int, entidade_pagadora: Optional[EntityTag],
                            supplier_clean: Optional[str] = None, emission_date: Optional[str] = None,
                            due_date: Optional[str] = None, payment_date: Optional[str] = None,
                            is_scheduled: bool = False) -> int:
+        # Handle None entidade_pagadora gracefully
+        entity_value = entidade_pagadora.value if entidade_pagadora else 'UNKNOWN'
+        
         res = self.connection.execute("""
             INSERT INTO transacoes (doc_id, amount_cents, entidade_pagadora, supplier_clean, emission_date, due_date, payment_date, is_scheduled)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id
-        """, [doc_id, amount_cents, entidade_pagadora.value, supplier_clean, emission_date, due_date, payment_date, 1 if is_scheduled else 0]).fetchone()
+        """, [doc_id, amount_cents, entity_value, supplier_clean, emission_date, due_date, payment_date, 1 if is_scheduled else 0]).fetchone()
         return res[0]
 
     def get_open_transactions_by_supplier(self, supplier: str, entity: Optional[EntityTag] = None) -> List[Dict[str, Any]]:

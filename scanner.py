@@ -72,6 +72,26 @@ except ImportError:
     GroupMatcher = None
     GROUP_MATCHER_AVAILABLE = False
 
+# Importa GeminiOracle para arbitragem inteligente (Sprint 6)
+try:
+    from voters.gemini_oracle import GeminiOracle, get_oracle, process_with_oracle
+    GEMINI_ORACLE_AVAILABLE = True
+except ImportError:
+    GeminiOracle = None
+    get_oracle = None
+    process_with_oracle = None
+    GEMINI_ORACLE_AVAILABLE = False
+    print("[AVISO] GeminiOracle não disponível - arbitragem IA desativada")
+
+# Importa preprocessing para restauração de comprovantes térmicos (Sprint 6)
+try:
+    from preprocessing import ImagePreprocessor, preprocess_pdf_page
+    PREPROCESSING_AVAILABLE = True
+except ImportError:
+    ImagePreprocessor = None
+    preprocess_pdf_page = None
+    PREPROCESSING_AVAILABLE = False
+
 def load_known_suppliers_full(db_connection=None) -> Dict[str, str]:
     """
     Carrega fornecedores do banco de dados ou arquivo known_suppliers.txt.
@@ -449,7 +469,7 @@ class CognitiveScanner:
         """Classifica o documento baseado no conteúdo (Sem dependência de nome de arquivo)."""
         text_upper = text_content.upper()
         
-        # NFe (Mercadorias)
+        # NFe (Mercadorias) - Highest priority
         if any(x in text_upper for x in ["DANFE", "NOTA FISCAL ELETRÔNICA", "PROTOCOLO DE AUTORIZAÇÃO DE USO"]):
             return "NFE"
         
@@ -457,7 +477,32 @@ class CognitiveScanner:
         if any(x in text_upper for x in ["NFS-E", "NOTA FISCAL DE SERVIÇO", "NOTA FISCAL DE SERVICO", "PREFEITURA", "ISSQN", "PRESTADOR", "TOMADOR", "VALOR LÍQUIDO", "VALOR LIQUIDO"]):
             return "NFSE"
         
-        # Boleto Bancário
+        # COMPROVANTE DE PAGAMENTO - Check BEFORE BOLETO (critical order!)
+        # These indicate an actual payment was made, not just a pending boleto
+        comprovante_patterns = [
+            "COMPROVANTE DE PAGAMENTO",
+            "COMPROVANTE DE TRANSFERÊNCIA",
+            "COMPROVANTE DE TRANSFERENCIA", 
+            "COMPROVANTE PIX",
+            "COMPROVANTE TED",
+            "COMPROVANTE DOC",
+            "DÉBITO EFETUADO",
+            "DEBITO EFETUADO",
+            "PAGAMENTO EFETUADO",
+            "PAGAMENTO REALIZADO",
+            "LIQUIDADO EM",
+            "QUITAÇÃO",
+            "QUITADO",
+            "SISBB",  # Banco do Brasil system code
+            "AUTENTICAÇÃO BANCÁRIA",
+            "AUTENTICACAO BANCARIA",
+            "CÓDIGO AUTENTICAÇÃO",
+            "CODIGO AUTENTICACAO",
+        ]
+        if any(x in text_upper for x in comprovante_patterns):
+            return "COMPROVANTE"
+        
+        # Boleto Bancário - Only if NOT a comprovante
         if any(x in text_upper for x in ["RECIBO DO PAGADOR", "AUTENTICAÇÃO MECÂNICA", "AUTENTICACAO MECANICA", "NOSSO NÚMERO", "NOSSO NUMERO", "LINHA DIGITÁVEL", "LINHA DIGITAVEL", "VENCIMENTO", "VALOR DO DOCUMENTO"]):
             return "BOLETO"
             
@@ -1926,6 +1971,55 @@ class CognitiveScanner:
 
                 except Exception as e:
                      print(f"    [AVISO] Pipeline falhou, usando basico: {e}")
+                
+                # =====================================================
+                # GEMINI ORACLE ARBITRATION (Sprint 6 - Always On)
+                # =====================================================
+                if GEMINI_ORACLE_AVAILABLE:
+                    try:
+                        # Prepare OCR data for arbitration
+                        ocr_data = {
+                            'amount': amount / 100 if amount else None,  # Convert cents to float
+                            'due_date': due_date,
+                            'emission_date': emission_date,
+                            'supplier_name': supplier_name,
+                            'document_type': segment.doc_type.name if segment.doc_type else None
+                        }
+                        
+                        # Call Oracle for visual extraction + arbitration
+                        oracle_decision = process_with_oracle(file_path, ocr_data)
+                        
+                        if oracle_decision.success:
+                            # Use Oracle's arbitrated values
+                            if oracle_decision.final_data.get('amount'):
+                                oracle_amount = oracle_decision.final_data['amount']
+                                if isinstance(oracle_amount, (int, float)) and oracle_amount > 0:
+                                    amount = int(oracle_amount * 100)  # Back to cents
+                                    
+                            if oracle_decision.final_data.get('due_date'):
+                                due_date = oracle_decision.final_data['due_date']
+                                
+                            if oracle_decision.final_data.get('emission_date'):
+                                emission_date = oracle_decision.final_data['emission_date']
+                                
+                            if oracle_decision.final_data.get('supplier_name'):
+                                supplier_name = oracle_decision.final_data['supplier_name']
+                            
+                            # Check scheduling status from Oracle
+                            if oracle_decision.payment_status == 'AGENDADO':
+                                is_scheduled = True
+                                
+                            # Log Oracle decision
+                            sources_msg = ", ".join([f"{k}:{v}" for k, v in oracle_decision.source_breakdown.items()])
+                            print(f"    [ORACLE] Confiança: {oracle_decision.confidence:.2f} | Status: {oracle_decision.payment_status}")
+                            print(f"    [ORACLE] Fontes: {sources_msg}")
+                            
+                            # Log warnings
+                            for warning in oracle_decision.warnings:
+                                print(f"    [ORACLE] ⚠️ {warning}")
+                                
+                    except Exception as e:
+                        print(f"    [AVISO] GeminiOracle falhou: {e}")
                 
                 # Para BOLETOs, tenta barcode extractor para dados precisos
                 if segment.doc_type == DocumentType.BOLETO and self.barcode_extractor:

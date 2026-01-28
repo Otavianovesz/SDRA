@@ -23,6 +23,7 @@ from typing import Optional, Dict, Any, List, Tuple
 import queue
 import tkinter as tk
 from tkinter import simpledialog
+from tkinter import ttk as ttk_native  # Native ttk for PanedWindow
 
 # Suporte a Drag-and-Drop
 try:
@@ -58,6 +59,25 @@ from scanner import CognitiveScanner
 from mcmf_reconciler import MCMFReconciler, TransactionIsland, DocumentNode
 from renamer import DocumentRenamer
 from group_matcher import GroupMatcher, DocumentGroup
+
+# Gmail integration (optional)
+try:
+    from integrations.gmail_connector import GmailConnector, EmailMessage
+    GMAIL_AVAILABLE = True
+except ImportError:
+    GmailConnector = None
+    EmailMessage = None
+    GMAIL_AVAILABLE = False
+    logging.warning("GmailConnector not available")
+
+# Link extractor for deep link hunting
+try:
+    from integrations.link_extractor import LinkExtractor, download_link_sync
+    LINK_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    LinkExtractor = None
+    download_link_sync = None
+    LINK_EXTRACTOR_AVAILABLE = False
 
 # Configuracao de logging
 logging.basicConfig(level=logging.INFO)
@@ -97,6 +117,294 @@ DOC_ICONS = {
     "COMPROVANTE": "✅",
     "UNKNOWN": "❓",
 }
+
+
+# ==============================================================================
+# TOAST NOTIFICATION (Premium QoL)
+# ==============================================================================
+
+class ToastNotification(tk.Toplevel):
+    """
+    Non-intrusive notification that auto-dismisses.
+    
+    Usage:
+        ToastNotification(root, "✅ Arquivo processado!", 'success')
+    """
+    
+    STYLES = {
+        'success': {'bg': '#27ae60', 'fg': 'white'},
+        'error': {'bg': '#e74c3c', 'fg': 'white'},
+        'warning': {'bg': '#f39c12', 'fg': 'white'},
+        'info': {'bg': '#3498db', 'fg': 'white'},
+    }
+    
+    def __init__(self, parent, message: str, style: str = 'info', duration: int = 3000):
+        super().__init__(parent)
+        
+        # Remove window decorations
+        self.overrideredirect(True)
+        self.attributes('-topmost', True)
+        
+        # Set opacity for modern look
+        try:
+            self.attributes('-alpha', 0.95)
+        except:
+            pass
+        
+        # Style
+        colors = self.STYLES.get(style, self.STYLES['info'])
+        
+        # Content frame
+        frame = tk.Frame(self, bg=colors['bg'], padx=20, pady=12)
+        frame.pack(fill=BOTH, expand=YES)
+        
+        # Message with icon
+        icons = {'success': '✅', 'error': '❌', 'warning': '⚠️', 'info': 'ℹ️'}
+        icon = icons.get(style, 'ℹ️')
+        
+        tk.Label(
+            frame,
+            text=f"{icon} {message}",
+            font=('Segoe UI', 11),
+            bg=colors['bg'],
+            fg=colors['fg']
+        ).pack()
+        
+        # Position in bottom-right corner of parent
+        self.update_idletasks()
+        w = self.winfo_width()
+        h = self.winfo_height()
+        px = parent.winfo_x()
+        py = parent.winfo_y()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        
+        x = px + pw - w - 20
+        y = py + ph - h - 60
+        self.geometry(f"+{x}+{y}")
+        
+        # Fade in effect
+        self._fade_in()
+        
+        # Auto-dismiss after duration
+        self.after(duration, self._fade_out)
+    
+    def _fade_in(self):
+        """Animate fade in."""
+        try:
+            alpha = 0.0
+            for i in range(10):
+                alpha += 0.1
+                self.after(i * 30, lambda a=alpha: self.attributes('-alpha', a))
+        except:
+            pass
+    
+    def _fade_out(self):
+        """Animate fade out and destroy."""
+        try:
+            alpha = 0.95
+            for i in range(10):
+                alpha -= 0.1
+                self.after(i * 30, lambda a=alpha: self.attributes('-alpha', max(0, a)))
+            self.after(350, self.destroy)
+        except:
+            self.destroy()
+
+
+# ==============================================================================
+# DOCUMENT CONTEXT MENU (Right-Click Actions)
+# ==============================================================================
+
+class DocumentContextMenu:
+    """
+    Context menu for document operations.
+    
+    Usage:
+        menu = DocumentContextMenu(app)
+        tree.bind('<Button-3>', menu.show)
+    """
+    
+    def __init__(self, app):
+        self.app = app
+        self.menu = tk.Menu(app.root, tearoff=0)
+        
+        # Actions with icons and shortcuts
+        self.menu.add_command(
+            label="📂 Abrir Arquivo",
+            command=app._on_open_file_click,
+            accelerator="Ctrl+O"
+        )
+        self.menu.add_command(
+            label="📁 Abrir Pasta",
+            command=app._on_open_folder_click
+        )
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="✏️ Editar",
+            command=app._on_edit_click,
+            accelerator="Ctrl+E"
+        )
+        self.menu.add_command(
+            label="🔄 Reprocessar",
+            command=app._on_reprocess_click,
+            accelerator="Ctrl+R"
+        )
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="🔗 Reconciliar",
+            command=app._on_match_click
+        )
+        self.menu.add_command(
+            label="📋 Renomear",
+            command=app._on_rename_click
+        )
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="🗑️ Excluir",
+            command=app._on_delete_click,
+            accelerator="Delete"
+        )
+        self.menu.add_separator()
+        self.menu.add_command(
+            label="📋 Copiar Info",
+            command=self._copy_info
+        )
+    
+    def show(self, event):
+        """Display context menu at cursor position."""
+        # Select the item under cursor
+        item = self.app.tree.identify_row(event.y)
+        if item:
+            self.app.tree.selection_set(item)
+            self.app.tree.focus(item)
+        
+        try:
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.menu.grab_release()
+    
+    def _copy_info(self):
+        """Copy selected document info to clipboard."""
+        if not self.app.selected_doc_id:
+            return
+        
+        try:
+            cursor = self.app.db.connection.cursor()
+            cursor.execute("""
+                SELECT d.doc_type, t.amount_cents, t.supplier_clean, t.due_date
+                FROM documentos d LEFT JOIN transacoes t ON d.id = t.doc_id
+                WHERE d.id = ?
+            """, (self.app.selected_doc_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                doc_type, amount, supplier, due_date = row
+                amount_str = SRDADatabase.cents_to_display(amount) if amount else "N/A"
+                info = f"{doc_type} | {supplier or 'N/A'} | {amount_str} | Venc: {due_date or 'N/A'}"
+                
+                self.app.root.clipboard_clear()
+                self.app.root.clipboard_append(info)
+                self.app._show_toast("📋 Informações copiadas!", 'success')
+        except Exception as e:
+            self.app._show_toast(f"Erro ao copiar: {e}", 'error')
+
+
+# ==============================================================================
+# QUICK SEARCH WIDGET (Premium Search Bar)
+# ==============================================================================
+
+class QuickSearchWidget(ttk.Frame):
+    """
+    Premium search bar with real-time filtering.
+    
+    Features:
+    - Debounced search (waits for typing to stop)
+    - Clear button
+    - Placeholder text
+    - Keyboard navigation
+    """
+    
+    def __init__(self, parent, on_search=None, placeholder="🔍 Buscar..."):
+        super().__init__(parent)
+        
+        self.on_search = on_search
+        self.placeholder = placeholder
+        self._search_timer = None
+        
+        # Search entry
+        self.var = tk.StringVar()
+        self.var.trace_add('write', self._on_change)
+        
+        self.entry = ttk.Entry(
+            self,
+            textvariable=self.var,
+            font=('Segoe UI', 10),
+            width=25
+        )
+        self.entry.pack(side=LEFT, fill=X, expand=YES)
+        
+        # Placeholder
+        self._show_placeholder()
+        self.entry.bind('<FocusIn>', self._on_focus_in)
+        self.entry.bind('<FocusOut>', self._on_focus_out)
+        self.entry.bind('<Return>', lambda e: self._do_search())
+        self.entry.bind('<Escape>', lambda e: self.clear())
+        
+        # Clear button
+        self.btn_clear = ttk.Button(
+            self,
+            text="✕",
+            width=3,
+            bootstyle='secondary-outline',
+            command=self.clear
+        )
+        self.btn_clear.pack(side=LEFT, padx=(5, 0))
+        self.btn_clear.pack_forget()  # Hidden initially
+    
+    def _show_placeholder(self):
+        if not self.var.get():
+            self.entry.insert(0, self.placeholder)
+            self.entry.configure(foreground='gray')
+    
+    def _on_focus_in(self, event):
+        if self.entry.get() == self.placeholder:
+            self.entry.delete(0, END)
+            self.entry.configure(foreground='')
+    
+    def _on_focus_out(self, event):
+        if not self.var.get():
+            self._show_placeholder()
+    
+    def _on_change(self, *args):
+        # Show/hide clear button
+        if self.var.get() and self.var.get() != self.placeholder:
+            self.btn_clear.pack(side=LEFT, padx=(5, 0))
+        else:
+            self.btn_clear.pack_forget()
+        
+        # Debounced search (300ms)
+        if self._search_timer:
+            self.after_cancel(self._search_timer)
+        self._search_timer = self.after(300, self._do_search)
+    
+    def _do_search(self):
+        query = self.var.get()
+        if query == self.placeholder:
+            query = ""
+        if self.on_search:
+            self.on_search(query)
+    
+    def clear(self):
+        self.entry.delete(0, END)
+        self.entry.configure(foreground='')
+        self.btn_clear.pack_forget()
+        if self.on_search:
+            self.on_search("")
+        self.entry.focus_set()
+    
+    def get(self) -> str:
+        val = self.var.get()
+        return "" if val == self.placeholder else val
 
 
 # ==============================================================================
@@ -471,6 +779,13 @@ class SRDAApplication:
         self.dragged_item = None
         self.current_islands: List[TransactionIsland] = []
         
+        # Threading state (MUST be before _build_ui to avoid AttributeError)
+        self._email_thread = None
+        self._monitor_thread = None
+        self._email_pipeline = None
+        self._gemini_total_tokens = 0
+        self._email_cards = []
+        
         # UI
         self._build_ui()
         self._setup_internal_drag_drop()
@@ -665,7 +980,97 @@ class SRDAApplication:
         self.root.bind("<Control-f>", lambda e: self._focus_filter())
         self.root.bind("<Control-F>", lambda e: self._focus_filter())
         
+        # Additional QoL shortcuts
+        self.root.bind("<Control-m>", lambda e: self._on_match_click())  # Match
+        self.root.bind("<Control-M>", lambda e: self._on_match_click())
+        self.root.bind("<Control-s>", lambda e: self._on_scan_click())   # Scan
+        self.root.bind("<Control-S>", lambda e: self._on_scan_click())
+        self.root.bind("<Control-g>", lambda e: self._on_show_graph_click())  # Graph
+        self.root.bind("<Control-G>", lambda e: self._on_show_graph_click())
+        self.root.bind("<F1>", lambda e: self._show_help())              # Help
+        self.root.bind("<F2>", lambda e: self._on_edit_click())          # Quick Edit
+        self.root.bind("<F3>", lambda e: self._quick_search_next())      # Find Next
+        
+        # Setup context menu for tree
+        self._setup_context_menu()
+        
         logger.info("Keyboard shortcuts configurados")
+    
+    def _setup_context_menu(self):
+        """Setup right-click context menu for document tree."""
+        self.context_menu = DocumentContextMenu(self)
+        self.tree.bind('<Button-3>', self.context_menu.show)
+    
+    def _show_toast(self, message: str, style: str = 'info', duration: int = 3000):
+        """Show a non-intrusive toast notification."""
+        ToastNotification(self.root, message, style, duration)
+    
+    def _show_help(self):
+        """Show keyboard shortcuts help dialog."""
+        help_text = """
+🎹 ATALHOS DE TECLADO
+
+📂 ARQUIVOS
+  Ctrl+O     Abrir arquivo selecionado
+  Ctrl+S     Escanear pasta
+  Ctrl+E     Editar documento
+  F2         Edição rápida
+  Delete     Excluir selecionado(s)
+
+📋 SELEÇÃO
+  Ctrl+A     Selecionar todos
+  Escape     Limpar seleção
+
+🔄 PROCESSAMENTO
+  Ctrl+P     Processar selecionados
+  Ctrl+R     Reprocessar
+  Ctrl+M     Reconciliar (Match)
+  Ctrl+B     Edição em lote
+
+🔍 NAVEGAÇÃO
+  Ctrl+F     Foco no filtro
+  Ctrl+G     Mostrar grafo
+  F1         Esta ajuda
+  F3         Buscar próximo
+  F5         Atualizar lista
+
+🖱️ MOUSE
+  Clique duplo     Editar
+  Clique direito   Menu de contexto
+  Arrastar         Reorganizar
+"""
+        Messagebox.showinfo(
+            title="⌨️ Atalhos de Teclado",
+            message=help_text,
+            parent=self.root
+        )
+        return "break"
+    
+    def _quick_search_next(self):
+        """Navigate to next search result or show search."""
+        if hasattr(self, 'quick_search') and self.quick_search.get():
+            # Find next matching item
+            current = self.tree.focus()
+            items = list(self.tree.get_children())
+            if current in items:
+                start = items.index(current) + 1
+            else:
+                start = 0
+            
+            query = self.quick_search.get().lower()
+            for i in range(start, len(items)):
+                values = self.tree.item(items[i])['values']
+                if values and query in str(values).lower():
+                    self.tree.selection_set(items[i])
+                    self.tree.focus(items[i])
+                    self.tree.see(items[i])
+                    self._on_document_select(None)
+                    return "break"
+            
+            self._show_toast("Nenhum resultado encontrado", 'warning')
+        else:
+            self._focus_filter()
+        return "break"
     
     def _select_all(self):
         """Select all items in the TreeView (Ctrl+A)."""
@@ -1304,49 +1709,225 @@ class SRDAApplication:
         self._build_status_bar()
     
     def _build_header(self):
+        """Build premium header with stats dashboard."""
         header = ttk.Frame(self.main_container)
         header.pack(fill=X, pady=(0, 5))
         
-        # Titulo
-        title_frame = ttk.Frame(header)
-        title_frame.pack(side=LEFT)
+        # =============== LEFT: Logo & Title ===============
+        brand_frame = ttk.Frame(header)
+        brand_frame.pack(side=LEFT)
         
-        ttk.Label(title_frame, text="SRDA-Rural v3.0", font=("Helvetica", 20, "bold"), bootstyle="inverse-primary").pack(side=LEFT, padx=(0, 10))
+        # Main title with gradient effect
+        title_label = ttk.Label(
+            brand_frame, 
+            text="🏛️ SDRA-Rural", 
+            font=("Segoe UI", 22, "bold"), 
+            bootstyle="inverse-primary"
+        )
+        title_label.pack(side=LEFT, padx=(0, 8))
         
-        dnd_status = "✅ DnD Ativo" if DND_AVAILABLE else "❌ DnD Inativo"
-        ttk.Label(title_frame, text=f"Reconciliacao Cognitiva | {dnd_status}", font=("Helvetica", 10), bootstyle="secondary").pack(side=LEFT, pady=8)
+        # Version badge
+        version_frame = ttk.Frame(brand_frame)
+        version_frame.pack(side=LEFT, padx=(0, 15))
         
-        # Botoes
-        btn_frame = ttk.Frame(header)
-        btn_frame.pack(side=RIGHT)
+        ttk.Label(
+            version_frame, 
+            text="v3.0", 
+            font=("Consolas", 9, "bold"),
+            bootstyle="success"
+        ).pack()
         
-        self.btn_add = ttk.Button(btn_frame, text="+ Adicionar PDFs", bootstyle="primary", width=16, command=self._on_add_files_click)
-        self.btn_add.pack(side=LEFT, padx=3)
-        ToolTip(self.btn_add, text="Adiciona PDFs individuais (ou arraste aqui)")
+        ttk.Label(
+            version_frame, 
+            text="Premium Edition", 
+            font=("Segoe UI", 8),
+            bootstyle="secondary"
+        ).pack()
         
-        self.btn_scan = ttk.Button(btn_frame, text="📁 Importar Pasta", bootstyle="info-outline", width=14, command=self._on_scan_click)
-        self.btn_scan.pack(side=LEFT, padx=3)
-        ToolTip(self.btn_scan, text="Importa PDFs rapidamente (sem AI)")
+        # Status indicators
+        status_frame = ttk.Frame(brand_frame)
+        status_frame.pack(side=LEFT, padx=(0, 10))
         
-        # Novo botao: Processar Selecionados com AI
-        self.btn_process = ttk.Button(btn_frame, text="🧠 Processar", bootstyle="warning", width=12, command=self._on_process_selected_click)
-        self.btn_process.pack(side=LEFT, padx=3)
-        ToolTip(self.btn_process, text="Processa selecionados com OCR + IA (Ctrl+P)")
+        dnd_icon = "✅" if DND_AVAILABLE else "❌"
+        dnd_text = "Drag & Drop" if DND_AVAILABLE else "DnD OFF"
+        ttk.Label(
+            status_frame, 
+            text=f"{dnd_icon} {dnd_text}", 
+            font=("Segoe UI", 9),
+            bootstyle="success" if DND_AVAILABLE else "danger"
+        ).pack()
         
-        self.btn_match = ttk.Button(btn_frame, text="🔗 Reconciliar", bootstyle="success", width=12, command=self._on_match_click)
-        self.btn_match.pack(side=LEFT, padx=3)
-        ToolTip(self.btn_match, text="Analisa documentos via Teoria dos Grafos")
+        gmail_icon = "📧" if GMAIL_AVAILABLE else "📭"
+        gmail_text = "Gmail Ready" if GMAIL_AVAILABLE else "Gmail OFF"
+        ttk.Label(
+            status_frame, 
+            text=f"{gmail_icon} {gmail_text}", 
+            font=("Segoe UI", 9),
+            bootstyle="info" if GMAIL_AVAILABLE else "secondary"
+        ).pack()
         
-        self.btn_rename = ttk.Button(btn_frame, text="📋 Renomear", bootstyle="warning-outline", width=11, command=self._on_rename_click)
-        self.btn_rename.pack(side=LEFT, padx=3)
+        # =============== CENTER: Stats Dashboard ===============
+        stats_frame = ttk.Frame(header)
+        stats_frame.pack(side=LEFT, expand=YES, padx=20)
         
-        # Novo botão: Sincronizar Gmail (Project Cyborg)
-        self.btn_gmail_sync = ttk.Button(btn_frame, text="📧 Gmail", bootstyle="info", width=8, command=self._on_gmail_sync_click)
-        self.btn_gmail_sync.pack(side=LEFT, padx=3)
-        ToolTip(self.btn_gmail_sync, text="Sincroniza e-mails do Gmail (Project Cyborg)")
+        # Stats cards
+        self.stat_total = self._create_stat_card(stats_frame, "📄", "0", "Total")
+        self.stat_pending = self._create_stat_card(stats_frame, "⏳", "0", "Pendentes")
+        self.stat_reconciled = self._create_stat_card(stats_frame, "🔗", "0", "Reconciliados")
+        self.stat_complete = self._create_stat_card(stats_frame, "✅", "0", "Completos")
         
-        self.btn_refresh = ttk.Button(btn_frame, text="↻", bootstyle="secondary", width=3, command=self._refresh_all)
-        self.btn_refresh.pack(side=LEFT, padx=3)
+        # =============== RIGHT: Action Toolbar ===============
+        toolbar = ttk.Frame(header)
+        toolbar.pack(side=RIGHT)
+        
+        # Primary actions group
+        primary_group = ttk.Frame(toolbar)
+        primary_group.pack(side=LEFT, padx=(0, 10))
+        
+        self.btn_add = ttk.Button(
+            primary_group, 
+            text="📥 Importar", 
+            bootstyle="primary", 
+            width=11, 
+            command=self._on_add_files_click
+        )
+        self.btn_add.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_add, text="Adiciona PDFs (ou arraste para janela)")
+        
+        self.btn_scan = ttk.Button(
+            primary_group, 
+            text="📁 Pasta", 
+            bootstyle="primary-outline", 
+            width=9, 
+            command=self._on_scan_click
+        )
+        self.btn_scan.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_scan, text="Escaneia pasta inteira (Ctrl+S)")
+        
+        # Processing actions group
+        process_group = ttk.Frame(toolbar)
+        process_group.pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=5)
+        
+        self.btn_process = ttk.Button(
+            process_group, 
+            text="🧠 AI", 
+            bootstyle="warning", 
+            width=7, 
+            command=self._on_process_selected_click
+        )
+        self.btn_process.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_process, text="Processa com OCR + Gemini (Ctrl+P)")
+        
+        self.btn_match = ttk.Button(
+            process_group, 
+            text="🔗 Match", 
+            bootstyle="success", 
+            width=9, 
+            command=self._on_match_click
+        )
+        self.btn_match.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_match, text="Reconcilia via MCMF (Ctrl+M)")
+        
+        self.btn_rename = ttk.Button(
+            process_group, 
+            text="📋 Renomear", 
+            bootstyle="info-outline", 
+            width=11, 
+            command=self._on_rename_click
+        )
+        self.btn_rename.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_rename, text="Renomeia arquivos reconciliados")
+        
+        # Gmail integration
+        ttk.Separator(toolbar, orient=VERTICAL).pack(side=LEFT, fill=Y, padx=5)
+        
+        gmail_group = ttk.Frame(toolbar)
+        gmail_group.pack(side=LEFT, padx=(0, 10))
+        
+        self.btn_gmail_sync = ttk.Button(
+            gmail_group, 
+            text="📧 Gmail", 
+            bootstyle="info", 
+            width=9, 
+            command=self._on_gmail_sync_click,
+            state=NORMAL if GMAIL_AVAILABLE else DISABLED
+        )
+        self.btn_gmail_sync.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_gmail_sync, text="Sincroniza emails do Gmail (Project Cyborg)")
+        
+        # Quick actions
+        quick_group = ttk.Frame(toolbar)
+        quick_group.pack(side=LEFT)
+        
+        self.btn_refresh = ttk.Button(
+            quick_group, 
+            text="↻", 
+            bootstyle="secondary-outline", 
+            width=3, 
+            command=self._refresh_all
+        )
+        self.btn_refresh.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_refresh, text="Atualizar lista (F5)")
+        
+        self.btn_help = ttk.Button(
+            quick_group, 
+            text="?", 
+            bootstyle="secondary-outline", 
+            width=3, 
+            command=self._show_help
+        )
+        self.btn_help.pack(side=LEFT, padx=2)
+        ToolTip(self.btn_help, text="Ajuda e atalhos (F1)")
+    
+    def _create_stat_card(self, parent, icon: str, value: str, label: str) -> ttk.Label:
+        """Create a mini stat card for the dashboard."""
+        card = ttk.Frame(parent)
+        card.pack(side=LEFT, padx=8)
+        
+        # Icon + Value
+        top = ttk.Frame(card)
+        top.pack()
+        
+        ttk.Label(top, text=icon, font=("Segoe UI Emoji", 12)).pack(side=LEFT)
+        value_label = ttk.Label(top, text=value, font=("Consolas", 14, "bold"), bootstyle="primary")
+        value_label.pack(side=LEFT, padx=(5, 0))
+        
+        # Label
+        ttk.Label(card, text=label, font=("Segoe UI", 8), bootstyle="secondary").pack()
+        
+        return value_label
+    
+    def _update_stats_dashboard(self):
+        """Update stats dashboard with current counts."""
+        try:
+            cursor = self.db.connection.cursor()
+            
+            # Total documents
+            cursor.execute("SELECT COUNT(*) FROM documentos WHERE status != 'ARCHIVED'")
+            total = cursor.fetchone()[0]
+            
+            # Pending (not reconciled)
+            cursor.execute("SELECT COUNT(*) FROM documentos WHERE status IN ('INGESTED', 'PARSED')")
+            pending = cursor.fetchone()[0]
+            
+            # Reconciled
+            cursor.execute("SELECT COUNT(*) FROM documentos WHERE status = 'RECONCILED'")
+            reconciled = cursor.fetchone()[0]
+            
+            # Complete (renamed)
+            cursor.execute("SELECT COUNT(*) FROM documentos WHERE status = 'RENAMED'")
+            complete = cursor.fetchone()[0]
+            
+            # Update labels
+            if hasattr(self, 'stat_total'):
+                self.stat_total.config(text=str(total))
+                self.stat_pending.config(text=str(pending))
+                self.stat_reconciled.config(text=str(reconciled))
+                self.stat_complete.config(text=str(complete))
+        except:
+            pass
     
     def _build_content_area(self):
         content = ttk.Frame(self.main_container)
@@ -1511,7 +2092,7 @@ class SRDAApplication:
         self.lbl_email_stats.pack(side=RIGHT, padx=10)
         
         # Main content area (split between triage and log)
-        content_pane = ttk.PanedWindow(self.email_tab, orient=VERTICAL)
+        content_pane = ttk_native.PanedWindow(self.email_tab, orient=VERTICAL)
         content_pane.pack(fill=BOTH, expand=YES, padx=5, pady=5)
         
         # === TOP: Email Triage Area (Sprint 6) ===
@@ -1598,21 +2179,239 @@ class SRDAApplication:
         self.email_empty_label.pack(expand=YES, pady=50)
     
     def _on_process_email_card(self, email_data: Dict):
-        """Handle processing an individual email card."""
-        self._email_log_message(f"Processando: {email_data.get('subject', 'N/A')}", 'info')
-        # TODO: Integrate with scanner/pipeline
+        """Process an email: save attachments, extract links, run scanner."""
+        subject = email_data.get('subject', 'N/A')[:50]
+        self._email_log_message(f"▶️ Processando: {subject}", 'info')
+        
+        # Get the email object (stored during sync)
+        email_obj = email_data.get('email_obj')
+        if not email_obj:
+            self._email_log_message("❌ Email object não encontrado", 'error')
+            return
+        
+        # Process in background thread
+        thread = threading.Thread(
+            target=self._process_email_attachments,
+            args=(email_obj, email_data),
+            daemon=True
+        )
+        thread.start()
+    
+    def _process_email_attachments(self, email_obj, email_data: Dict):
+        """Background processing of email attachments and links."""
+        try:
+            saved_files = []
+            input_folder = Path(self.scanner.input_folder)
+            
+            # 1. Save PDF/XML attachments
+            for attachment in email_obj.attachments:
+                if attachment.filename.lower().endswith(('.pdf', '.xml')):
+                    save_path = attachment.save_to(input_folder)
+                    if save_path and save_path.exists():
+                        saved_files.append(save_path)
+                        self.root.after(0, lambda f=attachment.filename: 
+                            self._email_log_message(f"  📄 Salvo: {f}", 'success'))
+            
+            # 2. Extract and download links (if no direct attachments)
+            if not saved_files and LINK_EXTRACTOR_AVAILABLE and email_obj.html_body:
+                self.root.after(0, lambda: self._email_log_message("  🔗 Buscando links...", 'info'))
+                
+                try:
+                    extractor = LinkExtractor()
+                    links = extractor.extract_links(email_obj.html_body)
+                    
+                    for link in links[:3]:  # Limit to top 3 links
+                        if link.confidence >= 0.5:
+                            self.root.after(0, lambda u=link.url[:40]: 
+                                self._email_log_message(f"  🔗 Baixando: {u}...", 'info'))
+                            
+                            downloaded = download_link_sync(link.url, input_folder)
+                            if downloaded and downloaded.exists():
+                                saved_files.append(downloaded)
+                                self.root.after(0, lambda f=downloaded.name: 
+                                    self._email_log_message(f"  ✅ Link baixado: {f}", 'success'))
+                except Exception as e:
+                    self.root.after(0, lambda err=str(e): 
+                        self._email_log_message(f"  ⚠️ Erro nos links: {err}", 'warning'))
+            
+            # 3. Process saved files with scanner
+            if saved_files:
+                self.root.after(0, lambda n=len(saved_files): 
+                    self._email_log_message(f"  🔄 Processando {n} arquivo(s)...", 'info'))
+                
+                doc_ids = []
+                for file_path in saved_files:
+                    try:
+                        ids = self.scanner.process_file(file_path)
+                        doc_ids.extend(ids)
+                    except Exception as e:
+                        self.root.after(0, lambda f=file_path.name, err=str(e): 
+                            self._email_log_message(f"  ❌ Erro em {f}: {err}", 'error'))
+                
+                # Update stats
+                if doc_ids:
+                    self.root.after(0, lambda: self._refresh_document_list())
+                    self.root.after(0, lambda n=len(doc_ids): 
+                        self._email_log_message(f"  ✅ {n} documento(s) importados!", 'success'))
+                    
+                    # Apply label to email (mark as processed)
+                    if GMAIL_AVAILABLE:
+                        try:
+                            connector = GmailConnector()
+                            if connector.authenticate():
+                                connector.apply_label(email_obj.id, 'processed')
+                        except:
+                            pass
+            else:
+                self.root.after(0, lambda: 
+                    self._email_log_message("  ⚠️ Nenhum arquivo encontrado para processar", 'warning'))
+            
+        except Exception as e:
+            logger.error(f"Email processing error: {e}")
+            self.root.after(0, lambda err=str(e): 
+                self._email_log_message(f"❌ Erro: {err}", 'error'))
     
     def _on_view_email_card(self, email_data: Dict):
-        """Handle viewing an individual email card."""
-        subject = email_data.get('subject', 'N/A')
-        sender = email_data.get('sender', 'N/A')
-        summary = email_data.get('summary', 'Sem resumo disponível')
+        """Show detailed email preview dialog."""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"📧 {email_data.get('subject', 'Email')[:50]}")
+        dialog.geometry("700x500")
+        dialog.transient(self.root)
+        dialog.grab_set()
         
-        Messagebox.showinfo(
-            title=f"Email: {subject[:30]}",
-            message=f"De: {sender}\n\n{summary}",
-            parent=self.root
-        )
+        # Center on parent
+        dialog.geometry(f"+{self.root.winfo_x() + 100}+{self.root.winfo_y() + 50}")
+        
+        # Main container
+        main_frame = ttk.Frame(dialog, padding=15)
+        main_frame.pack(fill=BOTH, expand=YES)
+        
+        # Header section
+        header_frame = ttk.Frame(main_frame)
+        header_frame.pack(fill=X, pady=(0, 10))
+        
+        # Status indicator
+        status = email_data.get('status', 'pending')
+        is_scheduled = email_data.get('is_scheduled', False)
+        
+        status_colors = {'ready': '🟢', 'warning': '🟡', 'error': '🔴', 'pending': '🔵'}
+        status_icon = status_colors.get(status, '⚪')
+        
+        if is_scheduled:
+            status_icon = '⚠️'
+            status_text = "AGENDAMENTO DETECTADO"
+            status_style = 'warning'
+        else:
+            status_text = status.upper()
+            status_style = 'secondary'
+        
+        ttk.Label(
+            header_frame,
+            text=f"{status_icon} {status_text}",
+            font=('Helvetica', 11, 'bold'),
+            bootstyle=status_style
+        ).pack(anchor=W)
+        
+        # Subject
+        ttk.Label(
+            header_frame,
+            text=email_data.get('subject', 'Sem assunto'),
+            font=('Helvetica', 14, 'bold'),
+            wraplength=650
+        ).pack(anchor=W, pady=(5, 0))
+        
+        # Metadata
+        meta_frame = ttk.Frame(main_frame)
+        meta_frame.pack(fill=X, pady=(0, 10))
+        
+        sender = email_data.get('sender', 'Desconhecido')
+        date = email_data.get('date', '')
+        ttk.Label(meta_frame, text=f"De: {sender}", bootstyle='secondary').pack(anchor=W)
+        ttk.Label(meta_frame, text=f"Data: {date}", bootstyle='secondary').pack(anchor=W)
+        
+        # Content types
+        content_types = email_data.get('content_types', [])
+        if content_types:
+            content_icons = {'pdf': '📄 PDF', 'xml': '📋 XML', 'link': '🔗 Link', 'attachment': '📎 Anexo'}
+            content_str = " | ".join([content_icons.get(ct, ct) for ct in content_types])
+            ttk.Label(meta_frame, text=f"Conteúdo: {content_str}", bootstyle='info').pack(anchor=W, pady=(5, 0))
+        
+        # Separator
+        ttk.Separator(main_frame, orient=HORIZONTAL).pack(fill=X, pady=10)
+        
+        # Body preview (scrollable)
+        body_label = ttk.Label(main_frame, text="📝 Corpo do Email:", font=('Helvetica', 10, 'bold'))
+        body_label.pack(anchor=W)
+        
+        body_frame = ttk.Frame(main_frame)
+        body_frame.pack(fill=BOTH, expand=YES, pady=(5, 10))
+        
+        body_text = tk.Text(body_frame, wrap=tk.WORD, height=10, font=('Consolas', 9))
+        body_scroll = ttk.Scrollbar(body_frame, orient=VERTICAL, command=body_text.yview)
+        body_text.configure(yscrollcommand=body_scroll.set)
+        
+        body_scroll.pack(side=RIGHT, fill=Y)
+        body_text.pack(side=LEFT, fill=BOTH, expand=YES)
+        
+        # Get email body
+        email_obj = email_data.get('email_obj')
+        if email_obj:
+            try:
+                body = getattr(email_obj, 'text_body', None) or getattr(email_obj, 'snippet', '') or ''
+                if not body and hasattr(email_obj, 'html_body'):
+                    # Strip HTML tags for preview
+                    import re
+                    html_body = email_obj.html_body or ''
+                    body = re.sub(r'<[^>]+>', ' ', html_body)
+                    body = re.sub(r'\s+', ' ', body).strip()[:2000]
+            except:
+                body = email_data.get('summary', 'Corpo não disponível')
+        else:
+            body = email_data.get('summary', 'Corpo não disponível')
+        
+        body_text.insert('1.0', body[:3000] if body else 'Sem conteúdo de texto')
+        body_text.configure(state=DISABLED)
+        
+        # Attachments section
+        if email_obj and hasattr(email_obj, 'attachments') and email_obj.attachments:
+            attach_label = ttk.Label(main_frame, text=f"📎 Anexos ({len(email_obj.attachments)}):", font=('Helvetica', 10, 'bold'))
+            attach_label.pack(anchor=W, pady=(5, 0))
+            
+            for att in email_obj.attachments[:5]:
+                filename = getattr(att, 'filename', 'anexo')
+                size = getattr(att, 'size', 0)
+                size_str = f"{size/1024:.1f} KB" if size > 0 else ""
+                ttk.Label(main_frame, text=f"  • {filename} {size_str}", bootstyle='secondary').pack(anchor=W)
+        
+        # Scheduling warning
+        if is_scheduled:
+            warning_frame = ttk.Frame(main_frame, bootstyle='warning')
+            warning_frame.pack(fill=X, pady=10)
+            ttk.Label(
+                warning_frame,
+                text="⚠️ ATENÇÃO: Este email pode conter um AGENDAMENTO de pagamento, não um comprovante!",
+                font=('Helvetica', 10, 'bold'),
+                bootstyle='warning',
+                wraplength=650
+            ).pack(padx=10, pady=10)
+        
+        # Action buttons
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=X, pady=(10, 0))
+        
+        ttk.Button(
+            btn_frame,
+            text="▶ Processar",
+            command=lambda: [dialog.destroy(), self._on_process_email_card(email_data)],
+            bootstyle='success'
+        ).pack(side=LEFT, padx=(0, 10))
+        
+        ttk.Button(
+            btn_frame,
+            text="Fechar",
+            command=dialog.destroy,
+            bootstyle='secondary-outline'
+        ).pack(side=RIGHT)
     
     def _email_log_message(self, message: str, level: str = 'info'):
         """Add a message to the email log console."""
@@ -1714,10 +2513,9 @@ class SRDAApplication:
             self.root.after(0, lambda: self.btn_stop_email.config(state=DISABLED))
     
     def _on_gmail_sync_click(self):
-        """Handle Gmail sync button click from main toolbar."""
-        # Switch to Email Monitor tab if not already there
+        """Handle Gmail sync button click - fetches emails and populates cards."""
+        # Switch to Email Monitor tab
         try:
-            # Find the email tab and select it
             for tab_id in self.notebook.tabs():
                 tab_text = self.notebook.tab(tab_id, 'text')
                 if 'Email' in tab_text or '📧' in tab_text:
@@ -1726,8 +2524,121 @@ class SRDAApplication:
         except Exception as e:
             logger.warning(f"Could not switch to email tab: {e}")
         
-        # Start the email pipeline
-        self._on_start_email_monitor()
+        # Check if Gmail is available
+        if not GMAIL_AVAILABLE:
+            self._email_log_message("⚠️ GmailConnector não disponível. Verifique credentials.json", 'error')
+            Messagebox.show_error(
+                "Gmail não disponível", 
+                "O módulo GmailConnector não está disponível.\n\nVerifique se credentials.json existe.",
+                parent=self.root
+            )
+            return
+        
+        # Check if already syncing
+        if self._email_thread and self._email_thread.is_alive():
+            self._email_log_message("⏳ Sincronização já em andamento...", 'warning')
+            return
+        
+        # Clear existing cards
+        self._clear_email_cards()
+        self._email_log_message("🔄 Iniciando sincronização com Gmail...", 'info')
+        
+        # Disable sync button
+        self.btn_sync_now.config(state=DISABLED)
+        
+        # Start background thread
+        self._email_thread = threading.Thread(target=self._run_gmail_sync, daemon=True)
+        self._email_thread.start()
+    
+    def _run_gmail_sync(self):
+        """Background thread to fetch and process emails from Gmail."""
+        try:
+            # Initialize connector
+            connector = GmailConnector()
+            
+            # Authenticate (may open browser)
+            self.root.after(0, lambda: self._email_log_message("🔐 Autenticando com Gmail...", 'info'))
+            
+            if not connector.authenticate():
+                self.root.after(0, lambda: self._email_log_message("❌ Falha na autenticação", 'error'))
+                return
+            
+            self.root.after(0, lambda: self._email_log_message("✅ Autenticado!", 'success'))
+            
+            # Fetch pending emails
+            self.root.after(0, lambda: self._email_log_message("📥 Buscando emails pendentes...", 'info'))
+            
+            emails = list(connector.fetch_pending_emails(days_lookback=7, max_results=20))
+            
+            email_count = len(emails)
+            self.root.after(0, lambda c=email_count: self._email_log_message(f"📧 {c} emails encontrados", 'success'))
+            self.root.after(0, lambda c=email_count: self.lbl_email_stats.config(text=f"Emails: {c} | Docs: 0"))
+            
+            # Process each email and create cards
+            for i, email in enumerate(emails):
+                # Determine content types
+                content_types = []
+                if email.has_pdf_attachment():
+                    content_types.append('pdf')
+                if email.has_xml_attachment():
+                    content_types.append('xml')
+                if email.html_body and LINK_EXTRACTOR_AVAILABLE:
+                    # Check for financial links
+                    try:
+                        extractor = LinkExtractor()
+                        links = extractor.extract_links(email.html_body)
+                        if links:
+                            content_types.append('link')
+                    except:
+                        pass
+                if email.attachments:
+                    content_types.append('attachment')
+                
+                # Determine status
+                status = 'pending'
+                if email.has_pdf_attachment() or email.has_xml_attachment():
+                    status = 'ready'
+                
+                # Check for scheduling keywords (BB)
+                is_scheduled = False
+                full_text = f"{email.subject} {email.html_body or ''}"
+                scheduling_keywords = ['AGENDAMENTO', 'AGENDADO', 'PREVISÃO DE DÉBITO', 'PAGAMENTO AGENDADO']
+                for kw in scheduling_keywords:
+                    if kw.lower() in full_text.lower():
+                        is_scheduled = True
+                        status = 'scheduled'
+                        break
+                
+                # Create email data for card
+                email_data = {
+                    'id': email.id,
+                    'subject': email.subject,
+                    'sender': email.sender,
+                    'date': email.date,
+                    'content_types': content_types,
+                    'status': status,
+                    'is_scheduled': is_scheduled,
+                    'summary': f"{len(email.attachments)} anexos" if email.attachments else "",
+                    'email_obj': email  # Store reference for processing
+                }
+                
+                # Add card to UI (must be done in main thread)
+                self.root.after(0, lambda data=email_data: self._add_email_card(data))
+                
+                # Log progress
+                log_msg = f"  [{i+1}/{len(emails)}] {email.subject[:40]}..."
+                self.root.after(0, lambda msg=log_msg: self._email_log_message(msg, 'info'))
+            
+            # Final status
+            self.root.after(0, lambda: self._email_log_message("✅ Sincronização concluída!", 'success'))
+            
+        except Exception as e:
+            logger.error(f"Gmail sync error: {e}")
+            error_msg = str(e)  # Capture the error message before lambda
+            self.root.after(0, lambda msg=error_msg: self._email_log_message(f"❌ Erro: {msg}", 'error'))
+        finally:
+            # Re-enable sync button
+            self.root.after(0, lambda: self.btn_sync_now.config(state=NORMAL))
     
     # ==========================================================================
     # CONCILIATION TAB (Sprint 4)
@@ -1901,7 +2812,7 @@ class SRDAApplication:
         """Archive the selected group."""
         selection = self.groups_tree.selection()
         if not selection:
-            Messagebox.showwarning("Aviso", "Selecione um grupo para arquivar.", parent=self.root)
+            Messagebox.show_warning("Selecione um grupo para arquivar.", "Aviso", parent=self.root)
             return
         
         values = self.groups_tree.item(selection[0])['values']
@@ -1909,8 +2820,8 @@ class SRDAApplication:
             link_id = values[0]
             
             result = Messagebox.yesno(
+                message=f"Arquivar grupo #{link_id}?\n\nOs documentos serão removidos da lista principal.",
                 title="Arquivar Grupo",
-                message=f"Arquivar grupo #{link_id}?\\n\\nOs documentos serão removidos da lista principal.",
                 parent=self.root
             )
             
@@ -2116,6 +3027,18 @@ class SRDAApplication:
         self.btn_next_page = ttk.Button(prev_header, text=">", width=3, bootstyle="secondary-outline", command=lambda: self._change_page(1))
         self.btn_next_page.pack(side=RIGHT)
         
+        # Zoom Controls (NEW)
+        ttk.Separator(prev_header, orient=VERTICAL).pack(side=RIGHT, fill=Y, padx=8)
+        
+        ttk.Button(prev_header, text="−", width=2, bootstyle="secondary-outline", 
+                   command=lambda: self._zoom_preview(-0.25)).pack(side=RIGHT)
+        
+        self.lbl_zoom_info = ttk.Label(prev_header, text="100%", font=("Consolas", 9))
+        self.lbl_zoom_info.pack(side=RIGHT, padx=(3, 3))
+        
+        ttk.Button(prev_header, text="+", width=2, bootstyle="secondary-outline",
+                   command=lambda: self._zoom_preview(0.25)).pack(side=RIGHT)
+        
         if path and os.path.exists(path):
             self._show_pdf_preview(path)
         
@@ -2136,6 +3059,26 @@ class SRDAApplication:
             row = cursor.fetchone()
             if row and os.path.exists(row[0]):
                 self._show_pdf_preview(row[0])
+    
+    def _zoom_preview(self, delta: float):
+        """Zoom in or out on the PDF preview."""
+        if not hasattr(self, '_preview_scale'):
+            self._preview_scale = 1.0
+        
+        new_scale = self._preview_scale + delta
+        if 0.5 <= new_scale <= 3.0:  # Limit zoom range
+            self._preview_scale = new_scale
+            
+            # Re-render with new scale
+            cursor = self.db.connection.cursor()
+            cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
+            row = cursor.fetchone()
+            if row and os.path.exists(row[0]):
+                self._show_pdf_preview(row[0])
+                
+            # Update zoom label
+            if hasattr(self, 'lbl_zoom_info'):
+                self.lbl_zoom_info.configure(text=f"{int(self._preview_scale * 100)}%")
 
     def _show_pdf_preview(self, pdf_path: str):
         try:
@@ -2149,12 +3092,20 @@ class SRDAApplication:
             # Ensure page in range
             if self.current_preview_page >= self.total_pages:
                 self.current_preview_page = 0
+            
+            # Get scale factor (default 1.0)
+            scale = getattr(self, '_preview_scale', 1.0)
+            base_zoom = 0.8 * scale
                 
             page = doc[self.current_preview_page]
-            pix = page.get_pixmap(matrix=fitz.Matrix(0.8, 0.8))
+            pix = page.get_pixmap(matrix=fitz.Matrix(base_zoom, base_zoom))
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             
-            img.thumbnail((400, 500), Image.Resampling.LANCZOS)
+            # Calculate max size based on scale
+            max_width = int(400 * scale)
+            max_height = int(500 * scale)
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            
             self.preview_image = ImageTk.PhotoImage(img)
             self.preview_label.configure(image=self.preview_image, text="")
             
@@ -2281,7 +3232,9 @@ class SRDAApplication:
     def _refresh_all(self):
         self._refresh_document_list()
         self._update_statistics()
+        self._update_stats_dashboard()  # Premium: Update header stats
         self._set_status("Lista atualizada")
+        self._show_toast("Lista atualizada ✅", 'success', 2000)
     
     # ==========================================================================
     # EVENTOS
@@ -2313,13 +3266,54 @@ class SRDAApplication:
         self._show_document_details(doc_id)
     
     def _on_add_files_click(self):
-        files = filedialog.askopenfilenames(title="Selecione PDFs", filetypes=[("PDF", "*.pdf"), ("Todos", "*.*")])
+        """Add files with background processing and progress feedback."""
+        files = filedialog.askopenfilenames(
+            title="Selecione PDFs", 
+            filetypes=[("PDF", "*.pdf"), ("XML", "*.xml"), ("Todos", "*.*")]
+        )
         
-        if files:
+        if not files:
+            return
+        
+        # Process in background thread to avoid UI freeze
+        def process_files_background():
+            total = len(files)
+            processed = 0
+            errors = 0
+            
             for f in files:
-                self.scanner.process_file(Path(f))
-            self._refresh_all()
-            self._set_status(f"{len(files)} arquivo(s) adicionado(s)")
+                try:
+                    filename = Path(f).name
+                    self.root.after(0, lambda fn=filename, i=processed, t=total: 
+                        self._set_status(f"⏳ Processando [{i+1}/{t}]: {fn[:30]}..."))
+                    
+                    self.scanner.process_file(Path(f))
+                    processed += 1
+                    
+                    # Show progress toast for each file
+                    self.root.after(0, lambda fn=filename: 
+                        self._show_toast(f"✅ {fn[:25]}", 'success', 1500))
+                    
+                except Exception as e:
+                    errors += 1
+                    filename = Path(f).name
+                    self.root.after(0, lambda fn=filename, err=str(e): 
+                        self._show_toast(f"❌ {fn[:20]}: {err[:30]}", 'error', 3000))
+            
+            # Final update
+            self.root.after(0, lambda: self._refresh_all())
+            
+            if errors == 0:
+                self.root.after(0, lambda p=processed: 
+                    self._set_status(f"✅ {p} arquivo(s) importados com sucesso!"))
+            else:
+                self.root.after(0, lambda p=processed, e=errors: 
+                    self._set_status(f"⚠️ {p} OK, {e} erros"))
+        
+        # Start thread
+        self._set_status(f"⏳ Iniciando importação de {len(files)} arquivo(s)...")
+        thread = threading.Thread(target=process_files_background, daemon=True)
+        thread.start()
     
     def _on_scan_click(self):
         if self.is_processing:
@@ -2335,10 +3329,38 @@ class SRDAApplication:
         self._run_in_thread(self._do_match)
     
     def _on_rename_click(self):
+        """Rename files with output folder selection."""
         if self.is_processing:
             return
         
-        result = Messagebox.yesno(title="Confirmar", message="Renomear arquivos reconciliados?\n\nArquivos serao COPIADOS para 'Output'.", parent=self.root)
+        # First, ask for output folder
+        output_folder = filedialog.askdirectory(
+            title="Selecione pasta de destino para os arquivos renomeados",
+            initialdir="./Output"
+        )
+        
+        if not output_folder:
+            return  # User cancelled
+        
+        # Store the selected folder for use in _do_rename
+        self._rename_output_folder = output_folder
+        
+        # Confirm with count
+        cursor = self.db.connection.cursor()
+        cursor.execute("SELECT COUNT(*) FROM documentos WHERE status = 'RECONCILED'")
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            Messagebox.showinfo("Info", "Nenhum documento reconciliado para renomear.", parent=self.root)
+            return
+        
+        result = Messagebox.yesno(
+            title="Confirmar Renomeação",
+            message=f"Renomear {count} arquivo(s) reconciliados?\n\n"
+                    f"📁 Destino: {output_folder}\n\n"
+                    "⚠️ Arquivos serão COPIADOS (originais intactos).",
+            parent=self.root
+        )
         if result == "Yes":
             self._run_in_thread(self._do_rename)
     
@@ -2610,15 +3632,25 @@ class SRDAApplication:
         self.root.after(0, self._refresh_all)
     
     def _do_rename(self):
-        """Renomeia arquivos com feedback visual."""
-        self.root.after(0, lambda: self._set_status("📋 Preparando operações de renomeação..."))
+        """Renomeia arquivos com feedback visual e pasta customizada."""
+        output_folder = getattr(self, '_rename_output_folder', './Output')
+        
+        self.root.after(0, lambda: self._set_status(f"📋 Preparando operações de renomeação para {output_folder}..."))
+        self.root.after(0, lambda: self._show_toast(f"📁 Destino: {Path(output_folder).name}", 'info', 2000))
+        
+        # Update renamer output directory if it has such attribute
+        if hasattr(self.renamer, 'output_dir'):
+            self.renamer.output_dir = Path(output_folder)
         
         result = self.renamer.run(dry_run=False, copy_mode=True)
         
         if result.failed > 0:
             msg = f"⚠️ Renomeação: {result.successful} OK | {result.failed} falhas | {result.skipped} ignorados"
+            self.root.after(0, lambda: self._show_toast(msg, 'warning', 4000))
         else:
-            msg = f"✅ Renomeado: {result.successful} arquivos copiados para Output/"
+            msg = f"✅ Renomeado: {result.successful} arquivos copiados para {Path(output_folder).name}/"
+            self.root.after(0, lambda: self._show_toast(msg, 'success', 3000))
+        
         self.root.after(0, lambda: self._set_status(msg))
     
     # ==========================================================================

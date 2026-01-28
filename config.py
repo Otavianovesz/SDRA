@@ -95,8 +95,8 @@ GMAIL_LOOKBACK_DAYS = 5  # Days to look back for emails
 # GEMINI AI CONFIGURATION (Project Cyborg)
 # =============================================================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL_FLASH = "gemini-1.5-flash"  # Fast, cheap (default)
-GEMINI_MODEL_PRO = "gemini-1.5-pro"  # Complex cases fallback
+GEMINI_MODEL_FLASH = "gemini-2.0-flash"  # Current stable model
+GEMINI_MODEL_PRO = "gemini-1.5-pro-latest"  # Complex cases fallback
 
 # =============================================================================
 # GMAIL LABELS (Project Cyborg)
