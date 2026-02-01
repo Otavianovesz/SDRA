@@ -466,6 +466,278 @@ class GeminiOracle:
             raw_response=gemini_result.get('raw_response')
         )
     
+    # =========================================================================
+    # BATCH PROCESSING - Phase 3: Cross-Document Analysis
+    # =========================================================================
+    
+    def process_batch(
+        self,
+        files: List[Union[str, Path]],
+        analysis_type: str = "reconciliation"  # "reconciliation" | "extraction"
+    ) -> Dict[str, Any]:
+        """
+        Process multiple documents in a single Gemini call for cross-analysis.
+        
+        This enables:
+        1. Matching boletos to NFes by value/supplier
+        2. Verifying payment receipts against invoices
+        3. Detecting duplicate entries
+        4. Proposing reconciliation groups
+        
+        Args:
+            files: List of file paths to analyze together
+            analysis_type: Type of analysis to perform
+            
+        Returns:
+            Dict with proposed matches, extracted data, and confidence
+        """
+        if len(files) == 0:
+            return {"success": False, "error": "No files provided"}
+        
+        if len(files) > 10:
+            logger.warning("Batch too large, splitting into chunks of 10")
+            # Process in chunks
+            results = []
+            for i in range(0, len(files), 10):
+                chunk = files[i:i+10]
+                result = self._process_batch_internal(chunk, analysis_type)
+                results.append(result)
+            return self._merge_batch_results(results)
+        
+        return self._process_batch_internal(files, analysis_type)
+    
+    def _process_batch_internal(
+        self,
+        files: List[Union[str, Path]],
+        analysis_type: str
+    ) -> Dict[str, Any]:
+        """Internal batch processing with JSON mode enforcement."""
+        try:
+            _ensure_genai()
+            
+            if not _genai_configured:
+                return {"success": False, "error": "Gemini not configured"}
+            
+            # Upload all files
+            uploaded_files = []
+            file_paths = [Path(f) for f in files]
+            
+            for file_path in file_paths:
+                try:
+                    if hasattr(genai_client, 'files'):
+                        uploaded = genai_client.files.upload(file=str(file_path))
+                    else:
+                        uploaded = genai_client.upload_file(str(file_path))
+                    uploaded_files.append({
+                        "uploaded": uploaded,
+                        "original_path": str(file_path),
+                        "filename": file_path.name
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to upload {file_path.name}: {e}")
+            
+            if not uploaded_files:
+                return {"success": False, "error": "Failed to upload any files"}
+            
+            # Wait for all files to be ready
+            import time as time_module
+            for file_info in uploaded_files:
+                uploaded = file_info["uploaded"]
+                max_wait = 60
+                waited = 0
+                while getattr(uploaded, 'state', None) and uploaded.state.name == "PROCESSING" and waited < max_wait:
+                    time_module.sleep(2)
+                    waited += 2
+                    if hasattr(genai_client, 'files'):
+                        uploaded = genai_client.files.get(name=uploaded.name)
+                    else:
+                        uploaded = genai_client.get_file(uploaded.name)
+                    file_info["uploaded"] = uploaded
+            
+            # Build batch analysis prompt
+            batch_prompt = self._build_batch_prompt(
+                [f["filename"] for f in uploaded_files],
+                analysis_type
+            )
+            
+            # Build content list for Gemini
+            contents = [batch_prompt]
+            for file_info in uploaded_files:
+                contents.append(file_info["uploaded"])
+            
+            # Call Gemini with JSON mode enforcement
+            if hasattr(genai_client, 'models'):
+                # NEW API: google.genai - with JSON mode
+                response = genai_client.models.generate_content(
+                    model=self.default_model,
+                    contents=contents,
+                    config={
+                        "response_mime_type": "application/json",  # JSON MODE ENFORCED
+                    }
+                )
+            else:
+                # OLD API fallback
+                model = genai_client.GenerativeModel(
+                    model_name=self.default_model,
+                    generation_config={"response_mime_type": "application/json"}
+                )
+                response = model.generate_content(contents)
+            
+            # Track tokens
+            tokens = 0
+            if hasattr(response, 'usage_metadata'):
+                tokens = getattr(response.usage_metadata, 'total_token_count', 0)
+            self._stats.total_tokens += tokens
+            
+            # Parse response (should be valid JSON due to JSON mode)
+            response_text = response.text if hasattr(response, 'text') else str(response.candidates[0].content.parts[0].text)
+            result = self._parse_json_response(response_text)
+            
+            # Cleanup uploaded files
+            for file_info in uploaded_files:
+                try:
+                    if hasattr(genai_client, 'files'):
+                        genai_client.files.delete(name=file_info["uploaded"].name)
+                    else:
+                        genai_client.delete_file(file_info["uploaded"].name)
+                except:
+                    pass
+            
+            if result['success']:
+                return {
+                    "success": True,
+                    "analysis_type": analysis_type,
+                    "files_processed": len(uploaded_files),
+                    "data": result['data'],
+                    "tokens_used": tokens,
+                    "model": self.default_model
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get('error', 'JSON parse failed'),
+                    "raw_response": response_text
+                }
+                
+        except Exception as e:
+            logger.error(f"Batch processing error: {e}")
+            return {"success": False, "error": str(e)}
+    
+    def _build_batch_prompt(self, filenames: List[str], analysis_type: str) -> str:
+        """Build prompt for batch analysis."""
+        
+        if analysis_type == "reconciliation":
+            return f"""Você é o GEMINI ORACLE analisando {len(filenames)} documentos financeiros para RECONCILIAÇÃO.
+
+## ARQUIVOS ANALISADOS
+{chr(10).join([f'- Documento {i+1}: {fn}' for i, fn in enumerate(filenames)])}
+
+## TAREFA
+Analise TODOS os documentos e identifique quais podem ser reconciliados juntos.
+Critérios de match:
+1. Mesmo valor (ou soma = total)
+2. Mesmo fornecedor/CNPJ
+3. Mesma data ou datas próximas
+4. Referências cruzadas (número de documento, chave NFe)
+
+## OUTPUT JSON OBRIGATÓRIO
+{{
+  "documents": [
+    {{
+      "index": 1,
+      "filename": "string",
+      "type": "NFE|BOLETO|COMPROVANTE|NFSE|UNKNOWN",
+      "supplier": "string",
+      "cnpj": "string",
+      "value": number,
+      "date": "YYYY-MM-DD",
+      "document_number": "string"
+    }}
+  ],
+  "proposed_matches": [
+    {{
+      "match_id": "M001",
+      "document_indices": [1, 2],
+      "match_reason": "mesmo valor e fornecedor",
+      "confidence": 0.95,
+      "total_debit": number,
+      "total_credit": number,
+      "difference": number
+    }}
+  ],
+  "orphans": [3],
+  "warnings": ["lista de alertas"],
+  "summary": {{
+    "total_documents": {len(filenames)},
+    "matched": number,
+    "unmatched": number,
+    "total_value_matched": number
+  }}
+}}
+
+## REGRAS
+- Valores em decimal: 1234.56
+- Datas em ISO: YYYY-MM-DD
+- Retorne APENAS JSON válido, sem markdown
+- difference deve ser total_debit - total_credit (positivo = falta comprovante)
+"""
+        
+        else:  # extraction
+            return f"""Você é o GEMINI ORACLE extraindo dados de {len(filenames)} documentos financeiros.
+
+## ARQUIVOS
+{chr(10).join([f'- Doc {i+1}: {fn}' for i, fn in enumerate(filenames)])}
+
+## OUTPUT JSON OBRIGATÓRIO
+{{
+  "documents": [
+    {{
+      "index": 1,
+      "filename": "string",
+      "type": "NFE|BOLETO|COMPROVANTE|NFSE",
+      "supplier": {{"name": "string", "cnpj": "string"}},
+      "values": {{"total": number, "final": number}},
+      "dates": {{"emission": "YYYY-MM-DD", "due": "YYYY-MM-DD", "payment": "YYYY-MM-DD"}},
+      "identifiers": {{"document_number": "string", "barcode": "string", "nfe_key": "string"}},
+      "payment_status": "CONFIRMADO|AGENDADO|PENDENTE",
+      "confidence": 0.95
+    }}
+  ],
+  "summary": {{
+    "total_extracted": {len(filenames)},
+    "high_confidence": number,
+    "low_confidence": number
+  }}
+}}
+
+Retorne APENAS JSON válido.
+"""
+    
+    def _merge_batch_results(self, results: List[Dict]) -> Dict:
+        """Merge multiple batch results into one."""
+        merged = {
+            "success": True,
+            "analysis_type": results[0].get("analysis_type", "batch"),
+            "files_processed": sum(r.get("files_processed", 0) for r in results),
+            "data": {
+                "documents": [],
+                "proposed_matches": [],
+                "orphans": [],
+                "warnings": []
+            },
+            "tokens_used": sum(r.get("tokens_used", 0) for r in results)
+        }
+        
+        for result in results:
+            if result.get("success") and result.get("data"):
+                data = result["data"]
+                merged["data"]["documents"].extend(data.get("documents", []))
+                merged["data"]["proposed_matches"].extend(data.get("proposed_matches", []))
+                merged["data"]["orphans"].extend(data.get("orphans", []))
+                merged["data"]["warnings"].extend(data.get("warnings", []))
+        
+        return merged
+    
     def _extract_visual(self, file_path: Path) -> Dict:
         """Extract data using visual analysis (supports both old and new API)."""
         self._stats.extractions += 1

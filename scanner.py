@@ -92,6 +92,24 @@ except ImportError:
     preprocess_pdf_page = None
     PREPROCESSING_AVAILABLE = False
 
+# Importa estratégias de extração contextual (Phase 2: Professional Extraction)
+try:
+    from extraction_strategies import (
+        ExtractionStrategyFactory,
+        extract_with_strategy,
+        clean_supplier_name,
+        SUPPLIER_BLACKLIST
+    )
+    STRATEGIES_AVAILABLE = True
+    logger.info("Extraction strategies loaded (contextual extraction enabled)")
+except ImportError:
+    ExtractionStrategyFactory = None
+    extract_with_strategy = None
+    clean_supplier_name = None
+    SUPPLIER_BLACKLIST = set()
+    STRATEGIES_AVAILABLE = False
+    logger.warning("extraction_strategies not available - using basic extraction")
+
 def load_known_suppliers_full(db_connection=None) -> Dict[str, str]:
     """
     Carrega fornecedores do banco de dados ou arquivo known_suppliers.txt.

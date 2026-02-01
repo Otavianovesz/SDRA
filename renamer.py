@@ -8,20 +8,50 @@ import re
 import shutil
 import logging
 import os
+import csv
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from database import DocumentStatus, SRDADatabase
 
 logger = logging.getLogger(__name__)
 
 @dataclass
+class RenameLogEntry:
+    """Log entry for CSV audit trail."""
+    timestamp: str
+    doc_id: int
+    original_path: str
+    new_path: str
+    status: str  # "SUCCESS", "FAILED", "SKIPPED"
+    message: str = ""
+
+@dataclass
 class RenameResult:
     successful: int = 0
     failed: int = 0
     skipped: int = 0
+    log_entries: List[RenameLogEntry] = field(default_factory=list)
+    
+    def add_entry(self, doc_id: int, original: str, new: str, status: str, message: str = ""):
+        entry = RenameLogEntry(
+            timestamp=datetime.now().isoformat(),
+            doc_id=doc_id,
+            original_path=original,
+            new_path=new,
+            status=status,
+            message=message
+        )
+        self.log_entries.append(entry)
+        
+        if status == "SUCCESS":
+            self.successful += 1
+        elif status == "FAILED":
+            self.failed += 1
+        else:
+            self.skipped += 1
 
 class Renamer:
     
@@ -144,11 +174,84 @@ class DocumentRenamer:
     """
     Componente responsável por orquestrar a renomeação em massa baseada no DB.
     Recupera documentos processados e aplica a padronização de nomes.
+    
+    Phase 5 Enhanced:
+    - Configurable output directory with set_output_dir()
+    - CSV audit log with export_csv()
     """
     def __init__(self, db: SRDADatabase, output_dir: str = "Output"):
         self.db = db
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._last_result: Optional[RenameResult] = None
+    
+    def set_output_dir(self, new_dir: str) -> bool:
+        """
+        Change output directory for rename operations.
+        
+        Args:
+            new_dir: New directory path
+            
+        Returns:
+            True if directory was set successfully
+        """
+        try:
+            new_path = Path(new_dir)
+            new_path.mkdir(parents=True, exist_ok=True)
+            self.output_dir = new_path
+            logger.info(f"Output directory set to: {new_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set output directory: {e}")
+            return False
+    
+    def export_csv(self, result: RenameResult = None, filepath: str = None) -> str:
+        """
+        Export rename log to CSV for audit trail.
+        
+        Args:
+            result: RenameResult to export (uses last result if None)
+            filepath: Custom filepath (generates timestamped name if None)
+            
+        Returns:
+            Path to exported CSV file
+        """
+        result = result or self._last_result
+        if not result or not result.log_entries:
+            logger.warning("No log entries to export")
+            return ""
+        
+        if not filepath:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filepath = self.output_dir / f"rename_log_{timestamp}.csv"
+        else:
+            filepath = Path(filepath)
+        
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                # Header
+                writer.writerow([
+                    "timestamp", "doc_id", "original_path", 
+                    "new_path", "status", "message"
+                ])
+                # Data
+                for entry in result.log_entries:
+                    writer.writerow([
+                        entry.timestamp,
+                        entry.doc_id,
+                        entry.original_path,
+                        entry.new_path,
+                        entry.status,
+                        entry.message
+                    ])
+            
+            logger.info(f"Exported {len(result.log_entries)} entries to {filepath}")
+            return str(filepath)
+            
+        except Exception as e:
+            logger.error(f"Failed to export CSV: {e}")
+            return ""
         
     def run(self, dry_run: bool = False, copy_mode: bool = True) -> RenameResult:
         """

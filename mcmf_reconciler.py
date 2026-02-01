@@ -25,7 +25,14 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, date
 
-from ortools.sat.python import cp_model
+# OR-Tools import with graceful degradation
+try:
+    from ortools.sat.python import cp_model
+    ORTOOLS_AVAILABLE = True
+except ImportError:
+    cp_model = None
+    ORTOOLS_AVAILABLE = False
+    logging.warning("OR-Tools not available - reconciliation disabled (protobuf conflict?)")
 
 
 class DocumentNode:
@@ -47,12 +54,40 @@ class DocumentNode:
 
 @dataclass
 class TransactionIsland:
-    """Group of matched documents (e.g. 1 Boleto + 1 Comprovante)."""
+    """Group of matched documents (e.g. 1 Boleto + 1 Comprovante).
+    
+    Phase 4 Enhanced: Includes debit/credit sums for visual reconciliation.
+    """
     nodes: List[DocumentNode]
     edges: List = field(default_factory=list)
     total_value: int = 0
     is_complete: bool = False
     master_date: Optional[str] = None
+    
+    # Phase 4: Debit/Credit tracking
+    total_debits: int = 0    # Sum of payments (Comprovantes)
+    total_credits: int = 0   # Sum of invoices (Boletos, NFes)
+    difference: int = 0      # debits - credits (0 = perfect match)
+    
+    # Tolerance match (document matched within tolerance, not exact)
+    within_tolerance: bool = False
+    
+    def get_summary(self) -> str:
+        """Get human-readable summary for tooltips."""
+        debit_str = f"R$ {self.total_debits / 100:.2f}"
+        credit_str = f"R$ {self.total_credits / 100:.2f}"
+        diff_str = f"R$ {abs(self.difference) / 100:.2f}"
+        
+        status = "✅ Fechado" if self.is_complete else "⚠️ Pendente"
+        if self.difference > 0:
+            diff_info = f"Falta: {diff_str}"
+        elif self.difference < 0:
+            diff_info = f"Sobra: {diff_str}"
+        else:
+            diff_info = "Exato"
+        
+        docs = len(self.nodes)
+        return f"{status} | {docs} docs | Σ Débitos: {debit_str} | Σ Créditos: {credit_str} | {diff_info}"
 
 logger = logging.getLogger(__name__)
 
@@ -284,7 +319,12 @@ class MCMFReconciler:
             island_payments = sum(n.amount_cents for n in component_nodes if n.doc_type == "COMPROVANTE")
             island_invoices = sum(n.amount_cents for n in component_nodes if n.doc_type != "COMPROVANTE")
             
-            is_complete = (island_payments == island_invoices) and (island_payments > 0)
+            # Phase 4: Tolerance check (default 100 cents = R$1.00)
+            TOLERANCE_CENTS = 100
+            difference = island_payments - island_invoices
+            
+            is_complete = (abs(difference) <= TOLERANCE_CENTS) and (island_payments > 0 or island_invoices > 0)
+            within_tolerance = is_complete and (difference != 0)
             
             # Determine master date (logic from legacy)
             master_date = None
@@ -320,10 +360,12 @@ class MCMFReconciler:
                 edges=island_edges,
                 total_value=max(island_payments, island_invoices),
                 is_complete=is_complete,
-                master_date=master_date
+                master_date=master_date,
+                total_debits=island_payments,
+                total_credits=island_invoices,
+                difference=difference,
+                within_tolerance=within_tolerance
             ))
-            
-        return islands
             
         return islands
 

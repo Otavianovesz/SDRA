@@ -60,6 +60,22 @@ from mcmf_reconciler import MCMFReconciler, TransactionIsland, DocumentNode
 from renamer import DocumentRenamer
 from group_matcher import GroupMatcher, DocumentGroup
 
+# Worker system for async processing (Phase 1)
+try:
+    from workers import WorkerPool, TaskType, TaskResult, create_worker_pool
+    WORKERS_AVAILABLE = True
+except ImportError:
+    WORKERS_AVAILABLE = False
+    logging.warning("workers module not available - using legacy threading")
+
+# Extraction strategies (Phase 2)
+try:
+    from extraction_strategies import ExtractionStrategyFactory, extract_with_strategy
+    STRATEGIES_AVAILABLE = True
+except ImportError:
+    STRATEGIES_AVAILABLE = False
+    logging.warning("extraction_strategies module not available")
+
 # Gmail integration (optional)
 try:
     from integrations.gmail_connector import GmailConnector, EmailMessage
@@ -786,12 +802,20 @@ class SRDAApplication:
         self._gemini_total_tokens = 0
         self._email_cards = []
         
+        # Professional Worker Pool (Phase 1: Non-blocking processing)
+        if WORKERS_AVAILABLE:
+            self.worker_pool = create_worker_pool(tk_root=self.root, max_workers=4)
+            logger.info("WorkerPool initialized (4 workers)")
+        else:
+            self.worker_pool = None
+            logger.warning("Using legacy threading (WorkerPool not available)")
+        
         # UI
         self._build_ui()
         self._setup_internal_drag_drop()
         self._setup_keyboard_shortcuts()  # QoL: Keyboard shortcuts
         
-        # UI Queue for thread safety
+        # UI Queue for thread safety (legacy fallback)
         self.gui_queue = queue.Queue()
         self._process_queue()
         
@@ -1966,8 +1990,8 @@ class SRDAApplication:
         self.filter_status.pack(side=LEFT)
         self.filter_status.bind("<<ComboboxSelected>>", lambda e: self._refresh_document_list())
         
-        # TreeView
-        columns = ("id", "tipo", "ent", "fornecedor", "valor", "status")
+        # TreeView with Match ID column for reconciliation visualization
+        columns = ("id", "tipo", "ent", "fornecedor", "valor", "match_id", "proc_status")
         self.tree = ttk.Treeview(left_frame, columns=columns, show="headings", bootstyle="primary", selectmode="extended")  # QoL: Multi-select enabled
         
         self.tree.heading("id", text="ID")
@@ -1975,14 +1999,30 @@ class SRDAApplication:
         self.tree.heading("ent", text="Ent")
         self.tree.heading("fornecedor", text="Fornecedor")
         self.tree.heading("valor", text="Valor")
-        self.tree.heading("status", text="Status")
+        self.tree.heading("match_id", text="Match")  # Reconciliation group
+        self.tree.heading("proc_status", text="⚙️")  # Processing status icon
         
         self.tree.column("id", width=40, anchor=CENTER)
         self.tree.column("tipo", width=70, anchor=CENTER)
         self.tree.column("ent", width=35, anchor=CENTER)
         self.tree.column("fornecedor", width=180)
         self.tree.column("valor", width=100, anchor=E)
-        self.tree.column("status", width=90, anchor=CENTER)
+        self.tree.column("match_id", width=60, anchor=CENTER)
+        self.tree.column("proc_status", width=30, anchor=CENTER)
+        
+        # Configure color tags for visual grouping (Phase 4: Reconciliation)
+        # Match groups get alternating colors for easy identification
+        self.tree.tag_configure("match_green", background="#1B4332", foreground="#95D5B2")
+        self.tree.tag_configure("match_blue", background="#1D3557", foreground="#A8DADC")
+        self.tree.tag_configure("match_purple", background="#3C1053", foreground="#E0AAFF")
+        self.tree.tag_configure("match_orange", background="#5C4033", foreground="#FFCB77")
+        self.tree.tag_configure("no_match", background="", foreground="")
+        
+        # Processing status icons
+        self.tree.tag_configure("status_pending", foreground="#6C757D")
+        self.tree.tag_configure("status_processing", foreground="#FFC107")
+        self.tree.tag_configure("status_done", foreground="#28A745")
+        self.tree.tag_configure("status_error", foreground="#DC3545")
         
         scrollbar = ttk.Scrollbar(left_frame, orient=VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -2015,6 +2055,10 @@ class SRDAApplication:
         
         self.preview_label = ttk.Label(self.preview_tab, anchor=CENTER)
         self.preview_label.pack(fill=BOTH, expand=YES)
+        
+        # Phase 5: Ctrl+MouseWheel zoom binding
+        self.preview_label.bind("<MouseWheel>", self._on_mousewheel_zoom)
+        self.preview_tab.bind("<MouseWheel>", self._on_mousewheel_zoom)
         
         # Aba: Grafo/Vinculos
         self.graph_tab = ttk.Frame(self.notebook, padding=5)
@@ -3079,6 +3123,15 @@ class SRDAApplication:
             # Update zoom label
             if hasattr(self, 'lbl_zoom_info'):
                 self.lbl_zoom_info.configure(text=f"{int(self._preview_scale * 100)}%")
+    
+    def _on_mousewheel_zoom(self, event):
+        """Handle Ctrl+MouseWheel for zoom."""
+        # Check if Ctrl is held (state & 0x4 for Ctrl on Windows)
+        if event.state & 0x4:  # Ctrl key
+            if event.delta > 0:
+                self._zoom_preview(0.25)  # Zoom in
+            else:
+                self._zoom_preview(-0.25)  # Zoom out
 
     def _show_pdf_preview(self, pdf_path: str):
         try:
@@ -3167,7 +3220,7 @@ class SRDAApplication:
         
         query = """
             SELECT 
-                d.id, d.doc_type, d.entity_tag, d.status,
+                d.id, d.doc_type, d.entity_tag, d.status, d.link_id,
                 t.supplier_clean, t.amount_cents
             FROM documentos d
             LEFT JOIN transacoes t ON d.id = t.doc_id
@@ -3192,6 +3245,11 @@ class SRDAApplication:
         
         columns = [col[0] for col in cursor.description]
         
+        # Color cycling for match groups
+        match_colors = ["match_green", "match_blue", "match_purple", "match_orange"]
+        match_color_map = {}  # link_id -> color tag
+        color_idx = 0
+        
         for row in cursor.fetchall():
             doc = dict(zip(columns, row))
             
@@ -3201,6 +3259,7 @@ class SRDAApplication:
             entity = doc.get('entity_tag', '-') or '-'
             supplier = doc.get('supplier_clean', '-') or '-'
             status = doc.get('status', '-')
+            link_id = doc.get('link_id', None)
             
             amount = doc.get('amount_cents', 0)
             amount_str = f"R$ {SRDADatabase.cents_to_display(amount)}" if amount else "-"
@@ -3208,8 +3267,26 @@ class SRDAApplication:
             if len(supplier) > 20:
                 supplier = supplier[:17] + "..."
             
-            self.tree.insert("", END, values=(doc['id'], f"{icon} {doc_type}", entity, supplier, amount_str, status), tags=(status,))
+            # Match ID display and color tag
+            if link_id:
+                match_display = f"🟢 G-{link_id}"
+                # Assign color to this link_id if not already assigned
+                if link_id not in match_color_map:
+                    match_color_map[link_id] = match_colors[color_idx % len(match_colors)]
+                    color_idx += 1
+                row_tag = match_color_map[link_id]
+            else:
+                match_display = "—"
+                row_tag = "no_match"
+            
+            # Processing status icon
+            proc_status = "✅" if status in ("RECONCILED", "RENAMED") else "⏳"
+            
+            self.tree.insert("", END, 
+                values=(doc['id'], f"{icon} {doc_type}", entity, supplier, amount_str, match_display, proc_status), 
+                tags=(row_tag,))
         
+        # Legacy status colors (not used anymore but keep for compatibility)
         for status, style in STATUS_COLORS.items():
             self.tree.tag_configure(status, foreground=self._get_color(style))
     
