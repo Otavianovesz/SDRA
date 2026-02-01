@@ -48,17 +48,12 @@ from PIL import Image, ImageTk
 
 # Importa modulos do sistema
 
-from database import (
-    SRDADatabase,
-    DocumentType,
-    DocumentStatus,
-    EntityTag,
-    MatchType
-)
-from scanner import CognitiveScanner
-from mcmf_reconciler import MCMFReconciler, TransactionIsland, DocumentNode
-from renamer import DocumentRenamer
-from group_matcher import GroupMatcher, DocumentGroup
+from database import SRDADatabase, MatchType
+from integrations.folder_scanner import CognitiveScanner
+from integrations.mcmf_reconciler import MCMFReconciler, TransactionIsland
+from integrations.renamer import DocumentRenamer
+from integrations.group_matcher import GroupMatcher  # Sprint 4
+from gui.components import PDFPreviewPanel, SmartEditPanel
 
 # Worker system for async processing (Phase 1)
 try:
@@ -591,25 +586,37 @@ class EmailCard(ttk.Frame):
 # DIALOG DE EDICAO
 # ==============================================================================
 
-class EditDialog(tk.Toplevel):
-    """Dialog para edicao de dados de um documento com Active Learning."""
+# ==============================================================================
+# DIALOG DE EDICAO INTELIGENTE (Smart Editor)
+# ==============================================================================
+
+class SmartEditDialog(tk.Toplevel):
+    """
+    Dialog avançado para edição de metadados.
+    Features:
+    - Combobox travada para taxonomia de tipos
+    - Autocomplete para fornecedores
+    - Formatação automática de moeda
+    """
     
-    def __init__(self, parent, doc_data: Dict[str, Any], db=None):
+    def __init__(self, parent, doc_data: Dict[str, Any], available_suppliers: List[str] = None, db=None):
         super().__init__(parent)
         self.result = None
         self.doc_data = doc_data
-        self.db = db  # For Active Learning logging
+        self.db = db
+        self.available_suppliers = sorted([s for s in (available_suppliers or []) if s])
         
-        # Store original values for correction tracking
+        # Store original values
         self._original_values = {
             'supplier': doc_data.get('supplier_clean', '') or '',
             'amount_cents': doc_data.get('amount_cents', 0) or 0,
+            'doc_type': doc_data.get('doc_type', 'UNKNOWN'),
             'due_date': doc_data.get('due_date', ''),
             'payment_date': doc_data.get('payment_date', '')
         }
         
-        self.title("Editar Documento")
-        self.geometry("450x400")
+        self.title("Editor de Metadados")
+        self.geometry("500x550")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -619,120 +626,160 @@ class EditDialog(tk.Toplevel):
     
     def _center(self):
         self.update_idletasks()
-        x = self.master.winfo_x() + (self.master.winfo_width() // 2) - 225
-        y = self.master.winfo_y() + (self.master.winfo_height() // 2) - 200
-        self.geometry(f"+{x}+{y}")
+        try:
+            x = self.master.winfo_x() + (self.master.winfo_width() // 2) - 250
+            y = self.master.winfo_y() + (self.master.winfo_height() // 2) - 275
+            self.geometry(f"+{x}+{y}")
+        except:
+            pass
     
     def _build_ui(self):
         main = ttk.Frame(self, padding=20)
         main.pack(fill=BOTH, expand=YES)
         
-        ttk.Label(main, text="Editar Dados Extraidos", font=("Helvetica", 14, "bold")).pack(anchor=W, pady=(0, 15))
+        ttk.Label(main, text="Editar Documento", font=("Segoe UI", 14, "bold")).pack(anchor=W, pady=(0, 20))
         
-        # Fornecedor
+        # --- TIPO DOCUMENTAL (Combobox) ---
+        ttk.Label(main, text="Tipo Documental:").pack(anchor=W)
+        self.type_var = tk.StringVar(value=self.doc_data.get('doc_type', 'UNKNOWN'))
+        self.cb_type = ttk.Combobox(main, textvariable=self.type_var, state="readonly", bootstyle="primary")
+        self.cb_type['values'] = ['BOLETO', 'COMPROVANTE', 'NFE', 'NFSE', 'FATURA', 'RECIBO', 'CONTRATO', 'UNKNOWN']
+        self.cb_type.pack(fill=X, pady=(2, 15))
+        
+        # --- FORNECEDOR (Autocomplete) ---
         ttk.Label(main, text="Fornecedor:").pack(anchor=W)
-        self.entry_supplier = ttk.Entry(main, width=50)
-        self.entry_supplier.pack(fill=X, pady=(2, 10))
-        self.entry_supplier.insert(0, self.doc_data.get('supplier_clean', '') or '')
+        self.supplier_var = tk.StringVar(value=self.doc_data.get('supplier_clean', '') or '')
+        self.entry_supplier = ttk.Entry(main, textvariable=self.supplier_var)
+        self.entry_supplier.pack(fill=X, pady=(2, 0))
+        self.entry_supplier.bind('<KeyRelease>', self._on_supplier_key)
+        self.entry_supplier.bind('<FocusOut>', lambda e: self.lst_suggestions.place_forget())
         
-        # Valor
+        # Listbox flutuante para sugestões
+        self.lst_suggestions = tk.Listbox(main, height=5, selectmode=SINGLE)
+        self.lst_suggestions.bind('<<ListboxSelect>>', self._on_suggestion_select)
+        
+        ttk.Label(main, text="* Comece a digitar para ver sugestões", font=("Segoe UI", 8), bootstyle="secondary").pack(anchor=W, pady=(0, 15))
+
+        # --- VALOR ---
         ttk.Label(main, text="Valor (R$):").pack(anchor=W)
-        self.entry_amount = ttk.Entry(main, width=20)
-        self.entry_amount.pack(anchor=W, pady=(2, 10))
-        amount = self.doc_data.get('amount_cents', 0)
-        if amount:
-            self.entry_amount.insert(0, f"{amount/100:.2f}".replace(".", ","))
+        self.amount_var = tk.StringVar()
+        amt = self.doc_data.get('amount_cents', 0)
+        if amt:
+            self.amount_var.set(f"{amt/100:.2f}".replace(".", ","))
         
-        # Data de Vencimento
-        ttk.Label(main, text="Data de Vencimento (DD/MM/AAAA):").pack(anchor=W)
-        self.entry_due_date = ttk.Entry(main, width=20)
-        self.entry_due_date.pack(anchor=W, pady=(2, 10))
-        if self.doc_data.get('due_date'):
-            self.entry_due_date.insert(0, self._iso_to_br(self.doc_data['due_date']))
+        self.entry_amount = ttk.Entry(main, textvariable=self.amount_var)
+        self.entry_amount.pack(fill=X, pady=(2, 15))
         
-        # Data de Pagamento
-        ttk.Label(main, text="Data de Pagamento (DD/MM/AAAA):").pack(anchor=W)
-        self.entry_payment_date = ttk.Entry(main, width=20)
-        self.entry_payment_date.pack(anchor=W, pady=(2, 10))
-        if self.doc_data.get('payment_date'):
-            self.entry_payment_date.insert(0, self._iso_to_br(self.doc_data['payment_date']))
+        # --- DATAS ---
+        dates_frame = ttk.Frame(main)
+        dates_frame.pack(fill=X, pady=(0, 15))
         
-        # Botoes
+        # Vencimento
+        f_due = ttk.Frame(dates_frame)
+        f_due.pack(side=LEFT, fill=X, expand=YES, padx=(0, 5))
+        ttk.Label(f_due, text="Vencimento (DD/MM/AAAA):").pack(anchor=W)
+        self.due_var = tk.StringVar(value=self._iso_to_br(self.doc_data.get('due_date', '')))
+        ttk.Entry(f_due, textvariable=self.due_var).pack(fill=X, pady=(2, 0))
+        
+        # Pagamento
+        f_pay = ttk.Frame(dates_frame)
+        f_pay.pack(side=RIGHT, fill=X, expand=YES, padx=(5, 0))
+        ttk.Label(f_pay, text="Pagamento (DD/MM/AAAA):").pack(anchor=W)
+        self.pay_var = tk.StringVar(value=self._iso_to_br(self.doc_data.get('payment_date', '')))
+        ttk.Entry(f_pay, textvariable=self.pay_var).pack(fill=X, pady=(2, 0))
+        
+        # --- BOTOES ---
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=X, pady=(20, 0))
         
-        ttk.Button(btn_frame, text="Cancelar", bootstyle="secondary", command=self.destroy).pack(side=RIGHT, padx=(5, 0))
-        ttk.Button(btn_frame, text="Salvar", bootstyle="success", command=self._on_save).pack(side=RIGHT)
-    
+        ttk.Button(btn_frame, text="Salvar Alterações", bootstyle="success", command=self._on_save).pack(side=RIGHT)
+        ttk.Button(btn_frame, text="Cancelar", bootstyle="secondary", command=self.destroy).pack(side=RIGHT, padx=(0, 10))
+
+    def _on_supplier_key(self, event):
+        typed = self.supplier_var.get().upper()
+        if not typed or event.keysym in ('Down', 'Up', 'Return', 'Escape'):
+            self.lst_suggestions.place_forget()
+            return
+            
+        matches = [s for s in self.available_suppliers if typed in s.upper()]
+        matches = matches[:5] # Top 5
+        
+        if matches:
+            self.lst_suggestions.delete(0, END)
+            for m in matches:
+                self.lst_suggestions.insert(END, m)
+            
+            # Position listbox below entry
+            x = self.entry_supplier.winfo_x()
+            y = self.entry_supplier.winfo_y() + self.entry_supplier.winfo_height()
+            w = self.entry_supplier.winfo_width()
+            self.lst_suggestions.place(x=x, y=y, width=w)
+            self.lst_suggestions.lift()
+        else:
+            self.lst_suggestions.place_forget()
+
+    def _on_suggestion_select(self, event):
+        if self.lst_suggestions.curselection():
+            selection = self.lst_suggestions.get(self.lst_suggestions.curselection())
+            self.supplier_var.set(selection)
+            self.lst_suggestions.place_forget()
+
     def _iso_to_br(self, date_str: str) -> str:
+        if not date_str: return ""
         try:
-            parts = date_str.split("-")
-            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+            return datetime.strptime(date_str, "%Y-%m-%d").strftime("%d/%m/%Y")
         except:
             return date_str
-    
-    def _br_to_iso(self, date_br: str) -> Optional[str]:
-        if not date_br:
-            return None
+            
+    def _br_to_iso(self, date_str: str) -> Optional[str]:
+        if not date_str: return None
         try:
-            parts = date_br.split("/")
-            return f"{parts[2]}-{parts[1]}-{parts[0]}"
+            return datetime.strptime(date_str.strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
         except:
             return None
-    
+
     def _on_save(self):
-        amount_str = self.entry_amount.get().replace(".", "").replace(",", ".")
+        # Validate Amount
+        amt_str = self.amount_var.get().replace(".", "").replace(",", ".")
         try:
-            amount_cents = int(float(amount_str) * 100) if amount_str else 0
+            amount_cents = int(float(amt_str) * 100) if amt_str else 0
         except:
             amount_cents = 0
-        
+            
         new_values = {
-            'supplier': self.entry_supplier.get().strip().upper(),
+            'doc_type': self.type_var.get(),
+            'supplier': self.supplier_var.get().strip().upper(),
             'amount_cents': amount_cents,
-            'due_date': self._br_to_iso(self.entry_due_date.get()),
-            'payment_date': self._br_to_iso(self.entry_payment_date.get()),
+            'due_date': self._br_to_iso(self.due_var.get()),
+            'payment_date': self._br_to_iso(self.pay_var.get())
         }
         
-        # Active Learning: Log corrections if values changed
+        # Log Active Learning
         if self.db and self.doc_data.get('doc_id'):
-            doc_id = self.doc_data['doc_id']
+            self._log_changes(new_values)
             
-            # Check each field for changes
-            if new_values['supplier'] != self._original_values['supplier']:
-                self.db.log_correction(
-                    doc_id=doc_id,
-                    field_name='fornecedor',
-                    ocr_value=self._original_values['supplier'],
-                    user_value=new_values['supplier'],
-                    original_confidence=self.doc_data.get('field_confidence', {}).get('fornecedor'),
-                    extractor_source=self.doc_data.get('extraction_sources', {}).get('fornecedor')
-                )
-                logger.info(f"[ACTIVE LEARNING] Correção de fornecedor registrada: {self._original_values['supplier']} -> {new_values['supplier']}")
-            
-            if new_values['amount_cents'] != self._original_values['amount_cents']:
-                self.db.log_correction(
-                    doc_id=doc_id,
-                    field_name='valor',
-                    ocr_value=str(self._original_values['amount_cents']),
-                    user_value=str(new_values['amount_cents']),
-                    original_confidence=self.doc_data.get('field_confidence', {}).get('valor'),
-                    extractor_source=self.doc_data.get('extraction_sources', {}).get('valor')
-                )
-                logger.info(f"[ACTIVE LEARNING] Correção de valor registrada: {self._original_values['amount_cents']} -> {new_values['amount_cents']}")
-            
-            if new_values['due_date'] and new_values['due_date'] != self._original_values['due_date']:
-                self.db.log_correction(
-                    doc_id=doc_id,
-                    field_name='data_vencimento',
-                    ocr_value=self._original_values['due_date'],
-                    user_value=new_values['due_date'],
-                    original_confidence=self.doc_data.get('field_confidence', {}).get('data_vencimento'),
-                    extractor_source=self.doc_data.get('extraction_sources', {}).get('data_vencimento')
-                )
-        
         self.result = new_values
         self.destroy()
+        
+    def _log_changes(self, new_values):
+        doc_id = self.doc_data['doc_id']
+        confidences = self.doc_data.get('field_confidence', {}) or {}
+        
+        # Helper to log field
+        def try_log(field, db_key, original, new, conf_key):
+             if str(original) != str(new):
+                 self.db.log_correction(
+                     doc_id=doc_id,
+                     field_name=field,
+                     ocr_value=str(original),
+                     user_value=str(new),
+                     original_confidence=confidences.get(conf_key, 0.0),
+                     extractor_source="manual_edit"
+                 )
+        
+        try_log('fornecedor', 'supplier_clean', self._original_values['supplier'], new_values['supplier'], 'fornecedor')
+        try_log('valor', 'amount_cents', self._original_values['amount_cents'], new_values['amount_cents'], 'valor')
+        try_log('doc_type', 'doc_type', self._original_values['doc_type'], new_values['doc_type'], 'tipo')
 
 
 # ==============================================================================
@@ -1720,25 +1767,59 @@ class SRDAApplication:
         self.context_menu.post(event.x_root, event.y_root)
     
     # ==========================================================================
-    # CONSTRUCAO DA INTERFACE
+    # UI BUILDERS (V3.0 COCKPIT)
     # ==========================================================================
     
     def _build_ui(self):
-        self.main_container = ttk.Frame(self.root, padding=10)
-        self.main_container.pack(fill=BOTH, expand=YES)
+        """Construct the V3.0 Financial Cockpit Layout."""
+        # 1. Top Bar (Toolbar + Dashboard)
+        top_container = ttk.Frame(self.root, padding=5)
+        top_container.pack(fill=X, side=TOP)
         
-        self._build_header()
-        ttk.Separator(self.main_container, orient=HORIZONTAL).pack(fill=X, pady=10)
-        self._build_content_area()
+        self._build_top_bar(top_container)
+        
+        # 2. Main PanedWindow (Tree | Preview | Edit)
+        self.panes = ttk.PanedWindow(self.root, orient=HORIZONTAL)
+        self.panes.pack(fill=BOTH, expand=YES, pady=5)
+        
+        # Pane 1: Document List (Left)
+        # We wrap it in a frame because _build_document_list expects a parent
+        self.left_pane = ttk.Frame(self.panes, padding=0)
+        self.panes.add(self.left_pane, weight=3) # 30%
+        self._build_document_list(self.left_pane)
+        
+        # Pane 2: PDF Preview (Center)
+        self.preview_panel = PDFPreviewPanel(self.panes)
+        self.panes.add(self.preview_panel, weight=5) # 50%
+        
+        # Pane 3: Smart Editor (Right)
+        self.edit_panel = SmartEditPanel(
+            self.panes, 
+            db_callback=lambda: self.db,
+            save_callback=self._on_smart_editor_save
+        )
+        self.panes.add(self.edit_panel, weight=2) # 20%
+        
+        # 3. Status Bar
         self._build_status_bar()
-    
-    def _build_header(self):
-        """Build premium header with stats dashboard."""
-        header = ttk.Frame(self.main_container)
-        header.pack(fill=X, pady=(0, 5))
+        
+        # Apply Dashboard stats
+        self._create_dashboard_widgets(top_container) 
+
+    def _create_dashboard_widgets(self, parent):
+        dash = ttk.Frame(parent)
+        dash.pack(side=RIGHT, padx=20)
+        self.stat_pending = self._create_stat_card(dash, "📥", "0", "Novos")
+        self.stat_reconciled = self._create_stat_card(dash, "⚖️", "0", "Conciliados")
+        self.stat_complete = self._create_stat_card(dash, "🏁", "0", "Finalizados")
+        self._update_stats_dashboard()
+        
+    def _build_top_bar(self, parent):
+        toolbar = ttk.Frame(parent)
+        toolbar.pack(side=LEFT, fill=X, expand=YES)
         
         # =============== LEFT: Logo & Title ===============
-        brand_frame = ttk.Frame(header)
+        brand_frame = ttk.Frame(toolbar)
         brand_frame.pack(side=LEFT)
         
         # Main title with gradient effect
@@ -1790,19 +1871,9 @@ class SRDAApplication:
             bootstyle="info" if GMAIL_AVAILABLE else "secondary"
         ).pack()
         
-        # =============== CENTER: Stats Dashboard ===============
-        stats_frame = ttk.Frame(header)
-        stats_frame.pack(side=LEFT, expand=YES, padx=20)
-        
-        # Stats cards
-        self.stat_total = self._create_stat_card(stats_frame, "📄", "0", "Total")
-        self.stat_pending = self._create_stat_card(stats_frame, "⏳", "0", "Pendentes")
-        self.stat_reconciled = self._create_stat_card(stats_frame, "🔗", "0", "Reconciliados")
-        self.stat_complete = self._create_stat_card(stats_frame, "✅", "0", "Completos")
-        
         # =============== RIGHT: Action Toolbar ===============
-        toolbar = ttk.Frame(header)
-        toolbar.pack(side=RIGHT)
+        # This part of the toolbar is now part of the _build_top_bar
+        # and will be packed to the right within the toolbar frame.
         
         # Primary actions group
         primary_group = ttk.Frame(toolbar)
@@ -1945,132 +2016,90 @@ class SRDAApplication:
             complete = cursor.fetchone()[0]
             
             # Update labels
-            if hasattr(self, 'stat_total'):
-                self.stat_total.config(text=str(total))
+            if hasattr(self, 'stat_pending'): # Check for one of the new dashboard labels
                 self.stat_pending.config(text=str(pending))
                 self.stat_reconciled.config(text=str(reconciled))
                 self.stat_complete.config(text=str(complete))
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Error updating stats dashboard: {e}")
     
-    def _build_content_area(self):
-        content = ttk.Frame(self.main_container)
-        content.pack(fill=BOTH, expand=YES)
-        
-        content.columnconfigure(0, weight=50)
-        content.columnconfigure(1, weight=50)
-        content.rowconfigure(0, weight=1)
-        
-        self._build_document_list(content)
-        self._build_details_panel(content)
-    
+    # V3.0 Override: Adjusted for Pane Layout
     def _build_document_list(self, parent):
-        left_frame = ttk.Labelframe(parent, text=" Documentos (Arraste para Vincular) ", padding=10, bootstyle="primary")
-        left_frame.grid(row=0, column=0, sticky=NSEW, padx=(0, 5))
+        left_frame = ttk.Labelframe(parent, text=" Documentos ", padding=5, bootstyle="primary")
+        left_frame.pack(fill=BOTH, expand=YES)
         
-        # Filtros
+        # Filter Frame
         filter_frame = ttk.Frame(left_frame)
-        filter_frame.pack(fill=X, pady=(0, 10))
+        filter_frame.pack(fill=X, pady=(0, 5))
         
-        ttk.Label(filter_frame, text="Entidade:").pack(side=LEFT, padx=(0, 5))
-        self.filter_entity = ttk.Combobox(filter_frame, values=["Todos", "VG", "MV"], state="readonly", width=10)
+        # Entity Filter
+        ttk.Label(filter_frame, text="Entidade:", font=("Segoe UI", 8)).pack(side=LEFT)
+        self.filter_entity = ttk.Combobox(filter_frame, values=["Todos", "OTAVIO", "DANIELA", "GLOBAL"], state="readonly", width=10)
         self.filter_entity.set("Todos")
-        self.filter_entity.pack(side=LEFT, padx=(0, 15))
+        self.filter_entity.pack(side=LEFT, padx=(2, 10))
         self.filter_entity.bind("<<ComboboxSelected>>", lambda e: self._refresh_document_list())
         
-        ttk.Label(filter_frame, text="Tipo:").pack(side=LEFT, padx=(0, 5))
-        self.filter_type = ttk.Combobox(filter_frame, values=["Todos", "NFE", "NFSE", "BOLETO", "COMPROVANTE"], state="readonly", width=12)
+        # Status Filter
+        ttk.Label(filter_frame, text="Status:", font=("Segoe UI", 8)).pack(side=LEFT)
+        self.filter_status = ttk.Combobox(filter_frame, values=["Todos", "INGESTED", "PARSED", "RECONCILED", "RENAMED", "ERROR"], state="readonly", width=12)
+        self.filter_status.set("Todos")
+        self.filter_status.pack(side=LEFT, padx=(2, 10))
+        self.filter_status.bind("<<ComboboxSelected>>", lambda e: self._refresh_document_list())
+
+        # Type Filter
+        ttk.Label(filter_frame, text="Tipo:", font=("Segoe UI", 8)).pack(side=LEFT)
+        self.filter_type = ttk.Combobox(filter_frame, values=["Todos", "BOLETO", "NFE", "NFSE", "COMPROVANTE"], state="readonly", width=10)
         self.filter_type.set("Todos")
-        self.filter_type.pack(side=LEFT, padx=(0, 15))
+        self.filter_type.pack(side=LEFT, padx=(2, 10))
         self.filter_type.bind("<<ComboboxSelected>>", lambda e: self._refresh_document_list())
         
-        ttk.Label(filter_frame, text="Status:").pack(side=LEFT, padx=(0, 5))
-        self.filter_status = ttk.Combobox(filter_frame, values=["Todos", "PARSED", "RECONCILED", "RENAMED"], state="readonly", width=12)
-        self.filter_status.set("Todos")
-        self.filter_status.pack(side=LEFT)
-        self.filter_status.bind("<<ComboboxSelected>>", lambda e: self._refresh_document_list())
-        
-        # TreeView with Match ID column for reconciliation visualization
-        columns = ("id", "tipo", "ent", "fornecedor", "valor", "match_id", "proc_status")
-        self.tree = ttk.Treeview(left_frame, columns=columns, show="headings", bootstyle="primary", selectmode="extended")  # QoL: Multi-select enabled
+        # TreeView
+        columns = ("id", "tipo", "ent", "fornecedor", "valor", "match_grp", "delta", "proc_status")
+        self.tree = ttk.Treeview(left_frame, columns=columns, show="headings", bootstyle="primary", selectmode="extended")
         
         self.tree.heading("id", text="ID")
         self.tree.heading("tipo", text="Tipo")
         self.tree.heading("ent", text="Ent")
-        self.tree.heading("fornecedor", text="Fornecedor")
+        self.tree.heading("fornecedor", text="Forn") # Shortened
         self.tree.heading("valor", text="Valor")
-        self.tree.heading("match_id", text="Match")  # Reconciliation group
-        self.tree.heading("proc_status", text="⚙️")  # Processing status icon
+        self.tree.heading("match_grp", text="Grp") # Shortened
+        self.tree.heading("delta", text="Δ") # Symbol
+        self.tree.heading("proc_status", text="⚙️")
         
-        self.tree.column("id", width=40, anchor=CENTER)
-        self.tree.column("tipo", width=70, anchor=CENTER)
-        self.tree.column("ent", width=35, anchor=CENTER)
-        self.tree.column("fornecedor", width=180)
-        self.tree.column("valor", width=100, anchor=E)
-        self.tree.column("match_id", width=60, anchor=CENTER)
+        self.tree.column("id", width=30, anchor=CENTER)
+        self.tree.column("tipo", width=60, anchor=CENTER)
+        self.tree.column("ent", width=30, anchor=CENTER)
+        self.tree.column("fornecedor", width=120)
+        self.tree.column("valor", width=80, anchor=E)
+        self.tree.column("match_grp", width=40, anchor=CENTER)
+        self.tree.column("delta", width=70, anchor=E)
         self.tree.column("proc_status", width=30, anchor=CENTER)
         
-        # Configure color tags for visual grouping (Phase 4: Reconciliation)
-        # Match groups get alternating colors for easy identification
-        self.tree.tag_configure("match_green", background="#1B4332", foreground="#95D5B2")
-        self.tree.tag_configure("match_blue", background="#1D3557", foreground="#A8DADC")
-        self.tree.tag_configure("match_purple", background="#3C1053", foreground="#E0AAFF")
-        self.tree.tag_configure("match_orange", background="#5C4033", foreground="#FFCB77")
-        self.tree.tag_configure("no_match", background="", foreground="")
+        # Scrollbars
+        sb_y = ttk.Scrollbar(left_frame, orient=VERTICAL, command=self.tree.yview)
+        sb_x = ttk.Scrollbar(left_frame, orient=HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         
-        # Processing status icons
-        self.tree.tag_configure("status_pending", foreground="#6C757D")
-        self.tree.tag_configure("status_processing", foreground="#FFC107")
-        self.tree.tag_configure("status_done", foreground="#28A745")
-        self.tree.tag_configure("status_error", foreground="#DC3545")
+        sb_y.pack(side=RIGHT, fill=Y)
+        sb_x.pack(side=BOTTOM, fill=X)
+        self.tree.pack(fill=BOTH, expand=YES)
         
-        scrollbar = ttk.Scrollbar(left_frame, orient=VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
-        scrollbar.pack(side=RIGHT, fill=Y)
-        
+        # Bindings
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_selection_change)
-        self.tree.bind("<Double-1>", lambda e: self._on_edit_click())                                                               
-    
-    def _build_details_panel(self, parent):
-        right_frame = ttk.Labelframe(parent, text=" Detalhes & Vinculos ", padding=10, bootstyle="info")
-        right_frame.grid(row=0, column=1, sticky=NSEW, padx=(5, 0))
         
-        # Notebook
-        self.notebook = ttk.Notebook(right_frame, bootstyle="info")
-        self.notebook.pack(fill=BOTH, expand=YES)
+        # Color tags
+        self.tree.tag_configure("match_green", background="#e8f5e9")
+        self.tree.tag_configure("match_blue", background="#e3f2fd")
+        self.tree.tag_configure("match_purple", background="#f3e5f5")
+        self.tree.tag_configure("match_orange", background="#fff3e0")
+        self.tree.tag_configure("no_match", background="white")
         
-        # Aba: Detalhes
-        self.details_tab = ttk.Frame(self.notebook, padding=5)
-        self.notebook.add(self.details_tab, text=" 📋 Detalhes ")
-        
-        self.details_scroll = ScrolledFrame(self.details_tab, autohide=True)
-        self.details_scroll.pack(fill=BOTH, expand=YES)
-        self.details_frame = self.details_scroll
-        
-        # Aba: Preview
-        self.preview_tab = ttk.Frame(self.notebook, padding=5)
-        self.notebook.add(self.preview_tab, text=" 📄 Preview ")
-        
-        self.preview_label = ttk.Label(self.preview_tab, anchor=CENTER)
-        self.preview_label.pack(fill=BOTH, expand=YES)
-        
-        # Phase 5: Ctrl+MouseWheel zoom binding
-        self.preview_label.bind("<MouseWheel>", self._on_mousewheel_zoom)
-        self.preview_tab.bind("<MouseWheel>", self._on_mousewheel_zoom)
-        
-        # Aba: Grafo/Vinculos
-        self.graph_tab = ttk.Frame(self.notebook, padding=5)
-        self.notebook.add(self.graph_tab, text=" 🔗 Ilha de Transacao ")
-        
-        self.graph_text = tk.Text(self.graph_tab, wrap=WORD, font=("Consolas", 10))
-        self.graph_text.pack(fill=BOTH, expand=YES)
-        
-        # Aba: Email Monitor (Project Cyborg)
-        self.email_tab = ttk.Frame(self.notebook, padding=5)
-        self.notebook.add(self.email_tab, text=" 📧 Email Monitor ")
-        self._build_email_tab()
+        if DND_AVAILABLE:
+            try:
+                self.tree.drop_target_register(dnd.DND_FILES)
+                self.tree.dnd_bind('<<Drop>>', self._on_tree_external_drop)
+            except Exception as e:
+                logger.warning(f"Failed to bind DND to tree: {e}")
         
         # Aba: Conciliação Visual (Sprint 4)
         self.conciliation_tab = ttk.Frame(self.notebook, padding=5)
@@ -2920,6 +2949,22 @@ class SRDAApplication:
         self.lbl_orphans = ttk.Label(self.stats_frame, text="Orfaos: 0", bootstyle="inverse-warning")
         self.lbl_orphans.pack(side=LEFT, padx=(0, 15))
         
+        # --- V4.0 System Health LEDs ---
+        health_frame = ttk.Frame(status_bar)
+        health_frame.pack(side=LEFT, padx=20)
+        
+        self.lbl_health_db = ttk.Label(health_frame, text="🗄️ DB", foreground="gray")
+        self.lbl_health_db.pack(side=LEFT, padx=5)
+        
+        self.lbl_health_ai = ttk.Label(health_frame, text="🧠 AI", foreground="gray")
+        self.lbl_health_ai.pack(side=LEFT, padx=5)
+        
+        self.lbl_health_email = ttk.Label(health_frame, text="📧 Email", foreground="gray")
+        self.lbl_health_email.pack(side=LEFT, padx=5)
+        
+        self._start_health_monitor()
+
+        
         ttk.Label(status_bar, text="💡 Atalhos: Ctrl+A (selec. todos) | Delete (excluir) | F5 (atualizar) | Ctrl+E (editar)", font=("Helvetica", 8), bootstyle="secondary").pack(side=LEFT, padx=20)
         
         self.lbl_status = ttk.Label(status_bar, text="Pronto", bootstyle="secondary")
@@ -2931,248 +2976,15 @@ class SRDAApplication:
     # EXIBICAO DE DETALHES
     # ==========================================================================
     
+    # V3.0 Cleanup: _show_document_details/zoom removed/integrated into panels
     def _show_no_selection(self):
-        for widget in self.details_frame.winfo_children():
-            widget.destroy()
-        
-        frame = ttk.Frame(self.details_frame)
-        frame.pack(expand=YES, fill=BOTH, padx=20, pady=50)
-        
-        ttk.Label(frame, text="Selecione um documento", font=("Helvetica", 12), bootstyle="secondary").pack()
-        ttk.Label(frame, text="ou arraste PDFs para esta janela", bootstyle="secondary").pack(pady=5)
-        
-        self.preview_label.configure(image='', text="Nenhum documento")
-        self.graph_text.delete(1.0, END)
-    
-    def _show_document_details(self, doc_id: int):
-        for widget in self.details_frame.winfo_children():
-            widget.destroy()
-        
-        cursor = self.db.connection.cursor()
-        cursor.execute("""
-            SELECT 
-                d.id, d.file_hash, d.original_path, d.doc_type, 
-                d.entity_tag, d.status, d.created_at, d.page_start, d.page_end,
-                d.access_key, d.doc_number,
-                t.amount_cents, t.supplier_clean, t.emission_date, t.due_date,
-                t.payment_date, t.is_scheduled, t.sisbb_auth
-            FROM documentos d
-            LEFT JOIN transacoes t ON d.id = t.doc_id
-            WHERE d.id = ?
-        """, (doc_id,))
-        
-        row = cursor.fetchone()
-        if not row:
-            self._show_no_selection()
-            return
-        
-        columns = [col[0] for col in cursor.description]
-        doc = dict(zip(columns, row))
-        
-        # Reset pagination
-        self.current_preview_page = 0
-        self.total_pages = 1  # Will be updated by preview
-        
-        container = ttk.Frame(self.details_frame)
-        container.pack(fill=BOTH, expand=YES, padx=10, pady=10)
-        
-        # Cabecalho
-        header = ttk.Frame(container)
-        header.pack(fill=X, pady=(0, 15))
-        
-        doc_type = doc.get('doc_type', 'UNKNOWN')
-        icon = DOC_ICONS.get(doc_type, "❓")
-        
-        ttk.Label(header, text=f"{icon} {doc_type}", font=("Helvetica", 16, "bold"), bootstyle="primary").pack(side=LEFT)
-        
-        entity = doc.get('entity_tag', '')
-        if entity:
-            style = "success" if entity == "VG" else "info"
-            ttk.Label(header, text=entity, font=("Helvetica", 14, "bold"), bootstyle=style).pack(side=RIGHT)
-        
+        """Clear selection visuals."""
+        # V3: Clear panels if needed, or keep last?
+        pass
 
-        ttk.Separator(container, orient=HORIZONTAL).pack(fill=X, pady=10)
-        
-        # Tabela de Parcelas (se disponivel)
-        installments = self.db.get_installments_by_nfe(doc_id)
-        if installments:
-            inst_frame = ttk.Labelframe(container, text=f" Parcelas ({len(installments)}) ", padding=5, bootstyle="info")
-            inst_frame.pack(fill=X, pady=(0, 10))
-            
-            # Simple header
-            ttk.Label(inst_frame, text="#", font=("Consolas", 9, "bold")).grid(row=0, column=0, padx=5)
-            ttk.Label(inst_frame, text="Vencimento", font=("Consolas", 9, "bold")).grid(row=0, column=1, padx=5)
-            ttk.Label(inst_frame, text="Valor", font=("Consolas", 9, "bold")).grid(row=0, column=2, padx=5)
-            ttk.Label(inst_frame, text="Status", font=("Consolas", 9, "bold")).grid(row=0, column=3, padx=5)
-            
-            for idx, inst in enumerate(installments):
-                r = idx + 1
-                seq = inst['seq_num']
-                dt = self._iso_to_br(inst['due_date'])
-                val = f"R$ {SRDADatabase.cents_to_display(inst['amount_cents'])}"
-                status = "✅" if inst['reconciled'] else "⭕"
-                
-                ttk.Label(inst_frame, text=f"{seq:02d}", font=("Consolas", 9)).grid(row=r, column=0, padx=5)
-                ttk.Label(inst_frame, text=dt, font=("Consolas", 9)).grid(row=r, column=1, padx=5)
-                ttk.Label(inst_frame, text=val, font=("Consolas", 9)).grid(row=r, column=2, padx=5)
-                ttk.Label(inst_frame, text=status, font=("Consolas", 9)).grid(row=r, column=3, padx=5)
-            
-            ttk.Separator(container, orient=HORIZONTAL).pack(fill=X, pady=10)
-        
-        # Informacoes
-        info_frame = ttk.Frame(container)
-        info_frame.pack(fill=X)
-        
-        row_num = 0
-        def add_row(label, value, highlight=False):
-            nonlocal row_num
-            ttk.Label(info_frame, text=label, font=("Helvetica", 10, "bold"), bootstyle="secondary").grid(row=row_num, column=0, sticky=W, pady=3)
-            style = "success" if highlight else "default"
-            ttk.Label(info_frame, text=value or "-", font=("Helvetica", 10), bootstyle=style, wraplength=250).grid(row=row_num, column=1, sticky=W, padx=(10, 0), pady=3)
-            row_num += 1
-        
-        add_row("ID:", str(doc.get('id', '')))
-        add_row("Status:", doc.get('status', ''))
-        
-        amount = doc.get('amount_cents', 0)
-        if amount:
-            add_row("Valor:", f"R$ {SRDADatabase.cents_to_display(amount)}", highlight=True)
-        
-        add_row("Fornecedor:", doc.get('supplier_clean', ''))
-        
-        if doc.get('payment_date'):
-            add_row("📅 Data Pagamento:", doc['payment_date'], highlight=True)
-        if doc.get('due_date'):
-            add_row("Data Vencimento:", doc['due_date'])
-        if doc.get('emission_date'):
-            add_row("Data Emissao:", doc['emission_date'])
-        
-        if doc.get('sisbb_auth'):
-            add_row("🔐 SISBB:", doc['sisbb_auth'], highlight=True)
-        
-        if doc.get('is_scheduled'):
-            ttk.Label(container, text="⚠️ AGENDAMENTO (nao e pagamento confirmado)", bootstyle="warning").pack(anchor=W, pady=10)
-        
-        # Preview
-        path = doc.get('original_path', '')
-        
-        # Titulo Preview e Botoes
-        prev_header = ttk.Frame(container)
-        prev_header.pack(fill=X, pady=(15, 5))
-        ttk.Label(prev_header, text="Visualização", font=("Helvetica", 10, "bold"), bootstyle="secondary").pack(side=LEFT)
-        
-        # Pagination Controls
-        self.btn_prev_page = ttk.Button(prev_header, text="<", width=3, bootstyle="secondary-outline", command=lambda: self._change_page(-1))
-        self.btn_prev_page.pack(side=RIGHT, padx=(5, 0))
-        
-        self.lbl_page_info = ttk.Label(prev_header, text="1/1", font=("Consolas", 9))
-        self.lbl_page_info.pack(side=RIGHT, padx=(5, 5))
-        
-        self.btn_next_page = ttk.Button(prev_header, text=">", width=3, bootstyle="secondary-outline", command=lambda: self._change_page(1))
-        self.btn_next_page.pack(side=RIGHT)
-        
-        # Zoom Controls (NEW)
-        ttk.Separator(prev_header, orient=VERTICAL).pack(side=RIGHT, fill=Y, padx=8)
-        
-        ttk.Button(prev_header, text="−", width=2, bootstyle="secondary-outline", 
-                   command=lambda: self._zoom_preview(-0.25)).pack(side=RIGHT)
-        
-        self.lbl_zoom_info = ttk.Label(prev_header, text="100%", font=("Consolas", 9))
-        self.lbl_zoom_info.pack(side=RIGHT, padx=(3, 3))
-        
-        ttk.Button(prev_header, text="+", width=2, bootstyle="secondary-outline",
-                   command=lambda: self._zoom_preview(0.25)).pack(side=RIGHT)
-        
-        if path and os.path.exists(path):
-            self._show_pdf_preview(path)
-        
-        # Grafo
-        self._show_document_graph(doc_id)
-    
-    def _change_page(self, delta: int):
-        """Muda a pagina do preview."""
-        if not self.selected_doc_id:
-            return
-            
-        new_page = self.current_preview_page + delta
-        if 0 <= new_page < self.total_pages:
-            self.current_preview_page = new_page
-            # Re-render preview
-            cursor = self.db.connection.cursor()
-            cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
-            row = cursor.fetchone()
-            if row and os.path.exists(row[0]):
-                self._show_pdf_preview(row[0])
-    
-    def _zoom_preview(self, delta: float):
-        """Zoom in or out on the PDF preview."""
-        if not hasattr(self, '_preview_scale'):
-            self._preview_scale = 1.0
-        
-        new_scale = self._preview_scale + delta
-        if 0.5 <= new_scale <= 3.0:  # Limit zoom range
-            self._preview_scale = new_scale
-            
-            # Re-render with new scale
-            cursor = self.db.connection.cursor()
-            cursor.execute("SELECT original_path FROM documentos WHERE id = ?", (self.selected_doc_id,))
-            row = cursor.fetchone()
-            if row and os.path.exists(row[0]):
-                self._show_pdf_preview(row[0])
-                
-            # Update zoom label
-            if hasattr(self, 'lbl_zoom_info'):
-                self.lbl_zoom_info.configure(text=f"{int(self._preview_scale * 100)}%")
-    
     def _on_mousewheel_zoom(self, event):
-        """Handle Ctrl+MouseWheel for zoom."""
-        # Check if Ctrl is held (state & 0x4 for Ctrl on Windows)
-        if event.state & 0x4:  # Ctrl key
-            if event.delta > 0:
-                self._zoom_preview(0.25)  # Zoom in
-            else:
-                self._zoom_preview(-0.25)  # Zoom out
-
-    def _show_pdf_preview(self, pdf_path: str):
-        try:
-            doc = fitz.open(pdf_path)
-            self.total_pages = len(doc)
-            
-            if self.total_pages == 0:
-                doc.close()
-                return
-            
-            # Ensure page in range
-            if self.current_preview_page >= self.total_pages:
-                self.current_preview_page = 0
-            
-            # Get scale factor (default 1.0)
-            scale = getattr(self, '_preview_scale', 1.0)
-            base_zoom = 0.8 * scale
-                
-            page = doc[self.current_preview_page]
-            pix = page.get_pixmap(matrix=fitz.Matrix(base_zoom, base_zoom))
-            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            
-            # Calculate max size based on scale
-            max_width = int(400 * scale)
-            max_height = int(500 * scale)
-            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-            
-            self.preview_image = ImageTk.PhotoImage(img)
-            self.preview_label.configure(image=self.preview_image, text="")
-            
-            # Update info
-            self.lbl_page_info.configure(text=f"{self.current_preview_page + 1}/{self.total_pages}")
-            
-            # Update buttons state
-            self.btn_prev_page.configure(state=NORMAL if self.current_preview_page > 0 else DISABLED)
-            self.btn_next_page.configure(state=NORMAL if self.current_preview_page < self.total_pages - 1 else DISABLED)
-            
-            doc.close()
-        except Exception as e:
-            self.preview_label.configure(image='', text=f"Erro: {e}")
-            logger.error(f"Erro no preview: {e}")
+        # Legacy method remnant - zoom is handled by PDFPreviewPanel internal logic
+        pass
     
     def _show_document_graph(self, doc_id: int):
         self.graph_text.delete(1.0, END)
@@ -3213,45 +3025,46 @@ class SRDAApplication:
     # ==========================================================================
     
     def _refresh_document_list(self):
+        from collections import defaultdict
+        
         for item in self.tree.get_children():
             self.tree.delete(item)
         
         cursor = self.db.connection.cursor()
         
-        query = """
-            SELECT 
-                d.id, d.doc_type, d.entity_tag, d.status, d.link_id,
-                t.supplier_clean, t.amount_cents
-            FROM documentos d
-            LEFT JOIN transacoes t ON d.id = t.doc_id
-            WHERE 1=1
-        """
+        query = "SELECT d.id, d.doc_type, d.entity_tag, d.status, t.link_id, t.supplier_clean, t.amount_cents FROM documentos d LEFT JOIN transacoes t ON d.id = t.doc_id WHERE 1=1"
         
-        entity = self.filter_entity.get()
-        if entity != "Todos":
-            query += f" AND d.entity_tag = '{entity}'"
-        
-        doc_type = self.filter_type.get()
-        if doc_type != "Todos":
-            query += f" AND d.doc_type = '{doc_type}'"
-        
-        status = self.filter_status.get()
-        if status != "Todos":
-            query += f" AND d.status = '{status}'"
+        # Filtros
+        if self.filter_entity.get() != "Todos": query += f" AND d.entity_tag = '{self.filter_entity.get()}'"
+        if self.filter_type.get() != "Todos": query += f" AND d.doc_type = '{self.filter_type.get()}'"
+        if self.filter_status.get() != "Todos": query += f" AND d.status = '{self.filter_status.get()}'"
         
         query += " ORDER BY d.id DESC"
-        
         cursor.execute(query)
         
         columns = [col[0] for col in cursor.description]
+        raw_rows = cursor.fetchall()
         
-        # Color cycling for match groups
+        # 1. Pre-calculate Group Deltas
+        group_deltas = defaultdict(int)
+        for r in raw_rows:
+            row = dict(zip(columns, r))
+            if row.get('link_id'):
+                amt = row.get('amount_cents', 0) or 0
+                dtype = row.get('doc_type', 'UNKNOWN')
+                # Convention: Boleto/Comprovante = Debit (-), NFe/Fatura = Credit (+)
+                if dtype in ('BOLETO', 'COMPROVANTE', 'DAR', 'GPS'):
+                    group_deltas[row['link_id']] -= amt
+                else:
+                    group_deltas[row['link_id']] += amt
+
+        # 2. Build Tree
         match_colors = ["match_green", "match_blue", "match_purple", "match_orange"]
-        match_color_map = {}  # link_id -> color tag
+        match_color_map = {}
         color_idx = 0
         
-        for row in cursor.fetchall():
-            doc = dict(zip(columns, row))
+        for r in raw_rows:
+            doc = dict(zip(columns, r))
             
             doc_type = doc.get('doc_type', 'UNKNOWN')
             icon = DOC_ICONS.get(doc_type, "❓")
@@ -3264,26 +3077,35 @@ class SRDAApplication:
             amount = doc.get('amount_cents', 0)
             amount_str = f"R$ {SRDADatabase.cents_to_display(amount)}" if amount else "-"
             
-            if len(supplier) > 20:
-                supplier = supplier[:17] + "..."
+            if len(supplier) > 25: supplier = supplier[:22] + "..."
             
-            # Match ID display and color tag
+            # Match Group Logic
+            match_grp = "—"
+            delta_str = "—"
+            row_tag = "no_match"
+            
             if link_id:
-                match_display = f"🟢 G-{link_id}"
-                # Assign color to this link_id if not already assigned
+                match_grp = f"G-{link_id}"
+                
+                # Delta Display
+                delta_val = group_deltas[link_id]
+                if delta_val == 0:
+                     delta_str = "✅ Zerado"
+                else:
+                     delta_str = f"R$ {SRDADatabase.cents_to_display(delta_val)}"
+                
+                # Color assignment
                 if link_id not in match_color_map:
                     match_color_map[link_id] = match_colors[color_idx % len(match_colors)]
                     color_idx += 1
                 row_tag = match_color_map[link_id]
-            else:
-                match_display = "—"
-                row_tag = "no_match"
             
-            # Processing status icon
-            proc_status = "✅" if status in ("RECONCILED", "RENAMED") else "⏳"
+            # Processing Status
+            proc_icon = "✅" if status in ("RECONCILED", "RENAMED") else "⏳"
+            if status == "ERROR": proc_icon = "❌"
             
             self.tree.insert("", END, 
-                values=(doc['id'], f"{icon} {doc_type}", entity, supplier, amount_str, match_display, proc_status), 
+                values=(doc['id'], f"{icon} {doc_type}", entity, supplier, amount_str, match_grp, delta_str, proc_icon), 
                 tags=(row_tag,))
         
         # Legacy status colors (not used anymore but keep for compatibility)
@@ -3317,30 +3139,186 @@ class SRDAApplication:
     # EVENTOS
     # ==========================================================================
     
-    def _on_tree_selection_change(self, event):
-        """Handle TreeView selection changes - supports multi-select."""
-        selection = self.tree.selection()
-        count = len(selection)
+    def _on_tree_external_drop(self, event):
+        """Handle files dropped from OS explorer onto the document list."""
+        if not event.data: return
         
-        if count == 0:
-            self._show_no_selection()
-        elif count == 1:
-            # Single selection - show details
-            self._on_document_select(event)
+        # Parse file list (handle braces for paths with spaces)
+        files = self.root.tk.splitlist(event.data)
+        if not files: return
+        
+        # Determine if dropped specific row to link
+        target_id = None
+        try:
+            # event.y is relative to the widget
+            item_id = self.tree.identify_row(event.y)
+            if item_id:
+                target_item = self.tree.item(item_id)
+                target_id = int(target_item['values'][0])
+        except:
+            pass
+            
+        if target_id:
+            # Ask context action
+            action = Messagebox.show_question(
+                "Ação de Drop",
+                f"Você soltou {len(files)} arquivo(s) sobre o Documento #{target_id}.\n\nO que deseja fazer?",
+                buttons=["Cancelar:secondary", "Apenas Importar:info", "Importar e Vincular:success"],
+                parent=self.root
+            )
+            
+            if action == "Cancelar": return
+            should_link = (action == "Importar e Vincular")
         else:
-            # Multiple selection - show count in status
-            self._set_status(f"📋 {count} itens selecionados (Delete para excluir, Ctrl+R para reprocessar)")
+            should_link = False
+            
+        # Process files
+        self._run_in_thread(self._process_dropped_files, files, target_id if should_link else None)
+
+    def _process_dropped_files(self, files, link_target_id=None):
+        """Background processing for dropped files."""
+        self._show_progress(True)
+        self._set_status("🚀 Processando arquivos arrastados...")
+        
+        new_ids = []
+        for f in files:
+            path = Path(f)
+            if path.suffix.lower() == '.pdf':
+                try:
+                    # Import and process
+                    doc_id = self.scanner.process_file(path)
+                    if doc_id:
+                        new_ids.append(doc_id)
+                        self.root.after(0, lambda fn=path.name: self._show_toast(f"✅ Importado: {fn}", 'success'))
+                except Exception as e:
+                    logger.error(f"Drop error {path}: {e}")
+                    
+        if link_target_id and new_ids:
+            # Create matches
+            count = 0
+            for new_id in new_ids:
+                if new_id != link_target_id:
+                     self.db.insert_match(link_target_id, new_id, MatchType.MANUAL, 1.0)
+                     count += 1
+            self.db.connection.commit()
+            self.root.after(0, lambda c=count, t=link_target_id: self._show_toast(f"🔗 {c} arquivos vinculados ao Doc #{t}", 'info'))
+
+        self.root.after(0, self._on_operation_complete)
     
-    def _on_document_select(self, event):
+    def _on_tree_selection_change(self, event):
+        """Handle TreeView selection changes - drives V3.0 Panels."""
         selection = self.tree.selection()
+        
         if not selection:
+            self._show_no_selection()
             return
+            
+        # Multi-select: just show the first one or logic for batch?
+        # For Cockpit, we focus on the first selected item
+        item_id = selection[0]
+        item = self.tree.item(item_id)
         
-        item = self.tree.item(selection[0])
-        doc_id = item['values'][0]
+        try:
+            doc_id = int(item['values'][0])
+            self.selected_doc_id = doc_id
+        except:
+            return # Header click or weird state
+            
+        # Fetch Full Data
+        cursor = self.db.connection.cursor()
+        cursor.execute("""
+            SELECT d.id, d.file_path, d.doc_type, d.entity_tag, 
+                   t.amount_cents, t.supplier_clean, t.due_date, t.payment_date,
+                   t.link_id
+            FROM documentos d 
+            LEFT JOIN transacoes t ON d.id = t.doc_id 
+            WHERE d.id = ?
+        """, (doc_id,))
         
-        self.selected_doc_id = doc_id
-        self._show_document_details(doc_id)
+        row = cursor.fetchone()
+        if not row: return
+        
+        columns = [col[0] for col in cursor.description]
+        doc_data = dict(zip(columns, row))
+        doc_data['doc_id'] = doc_id
+        doc_data['supplier_clean'] = doc_data['supplier_clean'] or "" # Ensure str
+        
+        # 3. Update Preview Panel with OCR Overlay
+        file_path = doc_data.get('file_path')
+        if file_path and os.path.exists(file_path):
+            self.preview_panel.load_document(file_path)
+            
+            # --- V4.0 Feature: Spatial Overlay ---
+            # Re-run spatial check to visualize what the Brain sees
+            try:
+                from spatial_extractor import get_spatial_extractor
+                spatial = get_spatial_extractor(file_path)
+                if spatial:
+                    overlay_boxes = []
+                    
+                    # 1. Visualize Value Anchor
+                    doc_type = doc_data.get('doc_type', 'UNKNOWN')
+                    anchor_text = "VALOR TOTAL DA NOTA" if doc_type == "NFE" else "VALOR DO DOCUMENTO"
+                    
+                    anchor = spatial.find_anchor(anchor_text)
+                    if anchor:
+                        # Anchor (Blue)
+                        overlay_boxes.append({'bbox': [anchor.x0, anchor.y0, anchor.x1, anchor.y1], 'label': 'Anchor', 'color': 'blue'})
+                        # ROI (Green) - Replicate logic from spatial_extractor
+                        if doc_type == "NFE":
+                             # extract_value_right logic
+                             roi = [anchor.x1, anchor.y0 - 2, anchor.x1 + 200, anchor.y1 + 2]
+                        else:
+                             # extract_value_below logic
+                             roi = [anchor.x0 - 5, anchor.y1, anchor.x0 + 150, anchor.y1 + 40]
+                             
+                        overlay_boxes.append({'bbox': roi, 'label': 'Target Area', 'color': 'green'})
+                    
+                    # 2. Visualize Supplier Anchor if unknown
+                    if not doc_data.get('supplier_clean'):
+                        supp_anchor = spatial.find_anchor("CNPJ")
+                        if supp_anchor:
+                             overlay_boxes.append({'bbox': [supp_anchor.x0, supp_anchor.y0, supp_anchor.x1, supp_anchor.y1], 'label': 'CNPJ', 'color': 'orange'})
+
+                    self.preview_panel.render(overlay_boxes=overlay_boxes)
+            except Exception as e:
+                logger.error(f"Overlay error: {e}")
+        
+        # 4. Update Editor Panel
+        self.edit_panel.load_data(doc_data)
+        
+        # 5. Update Status
+        self._set_status(f"Selecionado: Doc #{doc_id} - {os.path.basename(file_path or '')}")
+
+
+    def _on_smart_editor_save(self, doc_id, new_data):
+        """Callback from SmartEditPanel."""
+        try:
+            # Update Documentos table (type)
+            if new_data.get('doc_type'):
+                self.db.connection.execute(
+                    "UPDATE documentos SET doc_type = ? WHERE id = ?", 
+                    (new_data['doc_type'], doc_id)
+                )
+            
+            # Update Transacoes table
+            self.db.update_transaction_fields(
+                 doc_id=doc_id,
+                 supplier=new_data['supplier'],
+                 amount_cents=new_data['amount_cents'],
+                 due_date=new_data['due_date'],
+                 payment_date=new_data['payment_date']
+            )
+            
+            self._set_status(f"Documento #{doc_id} salvo com sucesso.")
+            self._refresh_document_list() # Refresh list to show changes
+            
+            # Show toast
+            self._show_toast("✅ Alterações salvas", "success")
+            
+        except Exception as e:
+            logger.error(f"Save error: {e}")
+            Messagebox.show_error("Erro ao salvar", str(e))
     
     def _on_add_files_click(self):
         """Add files with background processing and progress feedback."""
@@ -3452,22 +3430,43 @@ class SRDAApplication:
         """, (self.selected_doc_id,))
         
         row = cursor.fetchone()
-        if not row:
-            return
+        if not row: return
         
-        # Build doc_data with additional metadata for Active Learning
         columns = [col[0] for col in cursor.description]
         doc_data = dict(zip(columns, row))
-        doc_data['doc_id'] = self.selected_doc_id  # Required for corrections logging
+        doc_data['doc_id'] = self.selected_doc_id
         
-        dialog = EditDialog(self.root, doc_data, db=self.db)
+        # Obter lista de fornecedores para autocomplete
+        suppliers = []
+        try:
+            curr = self.db.connection.execute("SELECT DISTINCT supplier_clean FROM transacoes WHERE supplier_clean IS NOT NULL AND supplier_clean != '' ORDER BY supplier_clean")
+            suppliers = [r[0] for r in curr.fetchall()]
+        except: pass
+        
+        # Usar SmartEditDialog
+        dialog = SmartEditDialog(self.root, doc_data, available_suppliers=suppliers, db=self.db)
         self.root.wait_window(dialog)
         
         if dialog.result:
-            self.db.update_transaction_fields(doc_id=self.selected_doc_id, **dialog.result)
+            # Update DB with new values
+            res = dialog.result
+            self.db.update_transaction_fields(
+                 doc_id=self.selected_doc_id,
+                 supplier=res['supplier'],
+                 amount_cents=res['amount_cents'],
+                 due_date=res['due_date'],
+                 payment_date=res['payment_date'],
+                 doc_type=res.get('doc_type') # Novo campo editável
+            )
+            # Se mudou tipo, atualiza tabela documentos tambem (update_transaction_fields faz isso?)
+            # update_transaction_fields so atualiza transacoes. Precisamos atualizar documentos.doc_type
+            if res.get('doc_type'):
+                 self.db.connection.execute("UPDATE documentos SET doc_type = ? WHERE id = ?", (res['doc_type'], self.selected_doc_id))
+                 self.db.connection.commit()
+                 
             self._refresh_all()
             self._show_document_details(self.selected_doc_id)
-            self._set_status("Dados atualizados")
+            self._set_status("Dados atualizados com sucesso")
     
     def _on_reprocess_click(self):
         if not self.selected_doc_id:
@@ -3505,15 +3504,33 @@ class SRDAApplication:
             os.startfile(os.path.dirname(row[0]))
     
     def _on_delete_click(self):
-        if not self.selected_doc_id:
+        """Robust Bulk Delete."""
+        selection = self.tree.selection()
+        if not selection:
             return
-        
-        if Messagebox.yesno("Excluir", "Excluir documento do banco?\n\nArquivo original NAO sera apagado.", parent=self.root) == "Yes":
-            self._delete_document(self.selected_doc_id)
-            self.selected_doc_id = None
-            self._show_no_selection()
-            self._refresh_all()
-            self._set_status("Documento excluido")
+            
+        count = len(selection)
+        if Messagebox.yesno(
+            "Excluir", 
+            f"Excluir {count} documento(s) do banco?\n\n- Arquivos ORIGINAIS: Mantidos\n- Dados Extraídos: Apagados\n- Vínculos: Desfeitos", 
+            parent=self.root
+        ) != "Yes":
+           return
+           
+        deleted_count = 0
+        for item_id in selection:
+            item = self.tree.item(item_id)
+            try:
+                doc_id = int(item['values'][0])
+                self._delete_document(doc_id)
+                deleted_count += 1
+            except Exception as e:
+                logger.error(f"Failed to delete {item_id}: {e}")
+                
+        self.selected_doc_id = None
+        self._show_no_selection()
+        self._refresh_all()
+        self._set_status(f"{deleted_count} documentos excluídos com sucesso")
     
     def _delete_document(self, doc_id: int):
         cursor = self.db.connection.cursor()
@@ -3730,6 +3747,51 @@ class SRDAApplication:
         
         self.root.after(0, lambda: self._set_status(msg))
     
+    # ==========================================================================
+    # SYSTEM HEALTH MONITOR (Phase 4)
+    # ==========================================================================
+
+    def _start_health_monitor(self):
+        """Start periodic health check for status bar LEDs."""
+        self._check_system_health()
+        # Check every 30 seconds
+        self.root.after(30000, self._start_health_monitor)
+
+    def _check_system_health(self):
+        """Verify DB, AI, and Email connectivity."""
+        try:
+            # 1. Database Check
+            try:
+                self.db.connection.execute("SELECT 1")
+                self.lbl_health_db.configure(foreground="#2ecc71") # Green
+                ToolTip(self.lbl_health_db, text="Database Online")
+            except:
+                self.lbl_health_db.configure(foreground="#e74c3c") # Red
+                ToolTip(self.lbl_health_db, text="Database Connection Failed")
+            
+            # 2. AI Service Check (Env var or API Key presence)
+            try:
+                api_key = os.getenv("GEMINI_API_KEY")
+                if api_key:
+                     self.lbl_health_ai.configure(foreground="#2ecc71")
+                     ToolTip(self.lbl_health_ai, text="Gemini AI Ready")
+                else:
+                     self.lbl_health_ai.configure(foreground="#f39c12") # Orange
+                     ToolTip(self.lbl_health_ai, text="AI Key Missing (Using Local fallback)")
+            except:
+                self.lbl_health_ai.configure(foreground="#f39c12")
+                
+            # 3. Email Service Check
+            if GMAIL_AVAILABLE:
+                self.lbl_health_email.configure(foreground="#3498db") # Blue (Ready)
+                ToolTip(self.lbl_health_email, text="Gmail Module Loaded")
+            else:
+                self.lbl_health_email.configure(foreground="gray")
+                ToolTip(self.lbl_health_email, text="Gmail Module Unavailable")
+                
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+
     # ==========================================================================
     # EXECUCAO
     # ==========================================================================

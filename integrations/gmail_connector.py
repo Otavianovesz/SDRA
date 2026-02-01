@@ -17,10 +17,19 @@ import base64
 import hashlib
 import logging
 import time
+import io
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Generator, Callable
 from dataclasses import dataclass, field
+
+# V3.0 Dependencies
+try:
+    import pikepdf
+    PIKEPDF_AVAILABLE = True
+except ImportError:
+    PIKEPDF_AVAILABLE = False
 
 # Lazy imports to avoid loading heavy libs if not used
 _google_libs_loaded = False
@@ -31,6 +40,13 @@ build = None
 HttpError = None
 
 logger = logging.getLogger('srda.gmail')
+
+# V3.0: Vault for Auto-Decryption (Lockbreaker)
+# In production, load this from a secure encrypted file
+VAULT_PASSWORDS = [
+    "1234", "123456", "0000", "000000", # Generic
+    # Add User specific rules here (e.g. first 3-5 digits of CPF/CNPJ)
+]
 
 
 def _ensure_google_libs():
@@ -70,8 +86,8 @@ except ImportError:
     class config:
         from pathlib import Path
         BASE_DIR = Path(".")
-        GMAIL_CREDENTIALS_PATH = BASE_DIR / "credentials.json"
-        GMAIL_TOKEN_PATH = BASE_DIR / "token.json"
+        GMAIL_CREDENTIALS_PATH = BASE_DIR / "config/credentials.json" # Best practice path
+        GMAIL_TOKEN_PATH = BASE_DIR / "config/token.json"
         GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
         GMAIL_MAX_RESULTS = 20
         GMAIL_LOOKBACK_DAYS = 5
@@ -100,13 +116,63 @@ class EmailAttachment:
     mime_type: str
     md5_hash: str
     
-    def save_to(self, directory: Path) -> Path:
-        """Save attachment to directory, return path."""
+    def save_to(self, directory: Path, metadata: Optional[Dict] = None) -> Path:
+        """
+        Save attachment to directory, with V3.0 intelligence:
+        1. Auto-decrypt (Lockbreaker) using pikepdf
+        2. Create Sidecar JSON with metadata
+        """
         directory.mkdir(parents=True, exist_ok=True)
-        # Sanitize filename
+        
+        # Sanitize filename (Basic)
         safe_name = "".join(c if c.isalnum() or c in ".-_" else "_" for c in self.filename)
         output_path = directory / safe_name
-        output_path.write_bytes(self.data)
+        
+        # V3.0: Lockbreaker (Auto-Decryption)
+        saved_unlocked = False
+        if PIKEPDF_AVAILABLE and self.filename.lower().endswith('.pdf'):
+            try:
+                # Try opening from memory
+                with pikepdf.open(io.BytesIO(self.data)) as pdf:
+                    pdf.save(output_path)
+                    saved_unlocked = True
+            except pikepdf.PasswordError:
+                logger.info(f"🔒 PDF Encrypted: {self.filename} - Attempting Lockbreaker...")
+                for pwd in VAULT_PASSWORDS:
+                    try:
+                        with pikepdf.open(io.BytesIO(self.data), password=pwd) as pdf:
+                            pdf.save(output_path)
+                            saved_unlocked = True
+                            logger.info(f"🔓 Lockbreaker Success: Password '{pwd}' worked for {self.filename}")
+                            break
+                    except:
+                        continue
+                if not saved_unlocked:
+                    logger.warning(f"❌ Lockbreaker Failed for {self.filename}. Saving encrypted.")
+            except Exception as e:
+                logger.warning(f"Error checking PDF encryption: {e}")
+        
+        if not saved_unlocked:
+            output_path.write_bytes(self.data)
+
+        # V3.0: Sidecar JSON
+        if metadata:
+            sidecar_path = output_path.with_suffix(".json")
+            meta_copy = metadata.copy()
+            meta_copy.update({
+                "original_filename": self.filename,
+                "md5": self.md5_hash,
+                "saved_at": datetime.now().isoformat(),
+                "lockbreaker_status": "UNLOCKED" if saved_unlocked else "LOCKED_OR_NA"
+            })
+            
+            try:
+                with open(sidecar_path, 'w', encoding='utf-8') as f:
+                    json.dump(meta_copy, f, indent=4, ensure_ascii=False)
+                logger.debug(f"Created sidecar: {sidecar_path.name}")
+            except Exception as e:
+                logger.error(f"Failed to create sidecar for {self.filename}: {e}")
+
         return output_path
 
 
@@ -138,6 +204,31 @@ class EmailMessage:
     def get_xml_attachments(self) -> List[EmailAttachment]:
         """Get all XML attachments."""
         return [a for a in self.attachments if a.filename.lower().endswith('.xml')]
+
+    def save_attachments(self, output_dir: Path) -> List[Path]:
+        """
+        V3.0: Save all attachments with context (Sidecar JSON) and auto-decryption.
+        """
+        saved_paths = []
+        
+        # Prepare Metadata Context
+        metadata = {
+            "email_subject": self.subject,
+            "email_date": self.date,
+            "email_sender": self.sender,
+            "email_id": self.id,
+            "email_snippet": (self.text_body or "")[:500], # First 500 chars snippet
+            "source": "GMAIL_WATCHDOG_V3"
+        }
+        
+        for attachment in self.attachments:
+            try:
+                path = attachment.save_to(output_dir, metadata=metadata)
+                saved_paths.append(path)
+            except Exception as e:
+                logger.error(f"Failed to save attachment {attachment.filename}: {e}")
+                
+        return saved_paths
 
 
 class GmailConnector:
@@ -374,8 +465,14 @@ class GmailConnector:
         if custom_query:
             query = custom_query
         else:
+            # V3.0: "Sniper" Query
+            # Filters out noise (LinkedIn, opportunities) and focused on financial keywords
             query_parts = [
-                "(has:attachment OR filename:pdf OR filename:xml)",
+                "has:attachment",
+                "(filename:pdf OR filename:xml)",
+                "-filename:oportunidade",
+                "-from:linkedin",
+                "(subject:fatura OR subject:nota OR subject:boleto OR subject:comprovante OR subject:payment OR subject:invoice)",
                 f"-label:{config.GMAIL_LABELS['processed']}",
                 f"after:{date_threshold}"
             ]

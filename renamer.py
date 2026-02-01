@@ -57,12 +57,47 @@ class Renamer:
     
     @staticmethod
     def sanitize_filename(name: str) -> str:
-        """Remove caracteres inválidos para Windows/Linux."""
-        # Remove / \ : * ? " < > |
-        cleaned = re.sub(r'[\\/*?:"<>|]', "", name)
-        # Remove espaços extras
-        cleaned = " ".join(cleaned.split())
-        return cleaned
+        """
+        Remove caracteres inválidos e normaliza para sistema de arquivos (Windows/Linux).
+        
+        Rules:
+        1. Unicode normalization (NFKD) to remove accents (ç -> c, ã -> a)
+        2. Whitelist: A-Z, 0-9, _, -, ., space
+        3. Replace disallowed chars with underscore
+        4. Max length 240 chars
+        """
+        if not name:
+            return "UNKNOWN"
+            
+        import unicodedata
+        
+        # 1. Normalize unicode (accents)
+        normalized = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('ASCII')
+        
+        # 2. Replace common separators with underscore (avoid path traversal)
+        cleaned = re.sub(r'[\\/*?:"<>|]', "_", normalized)
+        
+        # 3. Keep only safe chars
+        # Allow A-Z, 0-9, space, dot, underscore, hyphen
+        cleaned = re.sub(r'[^a-zA-Z0-9 \.\-_]', "", cleaned)
+        
+        # 4. Collapse spaces and underscores
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        cleaned = re.sub(r'_+', '_', cleaned)
+        
+        # 5. Sanity check: no trailing dots or spaces
+        cleaned = cleaned.strip(" .")
+        
+        # 6. Windows Reserved Words check
+        reserved = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", 
+                    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
+        if cleaned.upper() in reserved:
+            cleaned = f"_{cleaned}_"
+        
+        if not cleaned:
+            return "UNKNOWN"
+            
+        return cleaned[:240]  # Respect Windows MAX_PATH safety
 
     @staticmethod
     def determine_master_date(documents: List[Dict]) -> Optional[str]:

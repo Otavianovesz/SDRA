@@ -25,6 +25,13 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, date
 
+# V3.0 Predictive Stack
+try:
+    from rapidfuzz import fuzz
+    RAPIDFUZZ_AVAILABLE = True
+except ImportError:
+    RAPIDFUZZ_AVAILABLE = False
+
 # OR-Tools import with graceful degradation
 try:
     from ortools.sat.python import cp_model
@@ -80,14 +87,16 @@ class TransactionIsland:
         
         status = "✅ Fechado" if self.is_complete else "⚠️ Pendente"
         if self.difference > 0:
-            diff_info = f"Falta: {diff_str}"
+            # Payment > Invoice -> Juros ou Multa (Extra paid)
+            diff_info = f"Juros/Multa: {diff_str}"
         elif self.difference < 0:
-            diff_info = f"Sobra: {diff_str}"
+            # Payment < Invoice -> Desconto ou Parcial (Less paid)
+            diff_info = f"Desconto: {diff_str}"
         else:
             diff_info = "Exato"
         
         docs = len(self.nodes)
-        return f"{status} | {docs} docs | Σ Débitos: {debit_str} | Σ Créditos: {credit_str} | {diff_info}"
+        return f"{status} | {docs} docs | Σ Pagamentos: {debit_str} | Σ Faturas: {credit_str} | {diff_info}"
 
 logger = logging.getLogger(__name__)
 
@@ -319,10 +328,11 @@ class MCMFReconciler:
             island_payments = sum(n.amount_cents for n in component_nodes if n.doc_type == "COMPROVANTE")
             island_invoices = sum(n.amount_cents for n in component_nodes if n.doc_type != "COMPROVANTE")
             
-            # Phase 4: Tolerance check (default 100 cents = R$1.00)
-            TOLERANCE_CENTS = 100
+            # Phase 4: Tolerance check (User Request: R$ 5.00)
+            TOLERANCE_CENTS = 500
             difference = island_payments - island_invoices
             
+            # Logic: If difference is small enough, we consider it "Complete" (Reconciled with adjustment)
             is_complete = (abs(difference) <= TOLERANCE_CENTS) and (island_payments > 0 or island_invoices > 0)
             within_tolerance = is_complete and (difference != 0)
             
@@ -368,6 +378,91 @@ class MCMFReconciler:
             ))
             
         return islands
+
+    def find_intelligent_matches(self, documents: List[DocumentNode]) -> List[TransactionIsland]:
+        """
+        V3.0 Predictive Brain: Find 'Golden Rule' matches without heavy solver.
+        
+        Golden Rule Criteria:
+        1. Value Match: Tolerance <= 10 cents (0.10 BRL)
+        2. Date Match: Within 3-5 days
+        3. Supplier Match: Fuzzy Ratio > 85% (using RapidFuzz)
+        
+        Returns:
+            List of High-Confidence TransactionIslands
+        """
+        if not RAPIDFUZZ_AVAILABLE:
+            logger.warning("RapidFuzz not available, skipping intelligent matching.")
+            return []
+            
+        payments = [d for d in documents if d.doc_type == "COMPROVANTE"]
+        invoices = [d for d in documents if d.doc_type != "COMPROVANTE"]
+        
+        matched_islands = []
+        used_invoice_ids = set()
+        
+        # Sort by date for localized search (optimization)
+        # payments.sort(key=lambda x: x.payment_date or "0000-00-00")
+        
+        for p in payments:
+            best_candidate = None
+            best_score = 0
+            
+            # Simple linear scan (optimize with bins for production scale)
+            for i in invoices:
+                if i.id in used_invoice_ids: continue
+                
+                # 1. Value Check (Fastest fail)
+                diff = abs(p.amount_cents - i.amount_cents)
+                if diff > 10: continue # 10 cents tolerance
+                
+                # 2. Date Check
+                p_date_str = p.payment_date or p.due_date
+                i_date_str = i.due_date or i.emission_date
+                
+                if not (p_date_str and i_date_str): continue
+                
+                try:
+                    d1 = datetime.strptime(p_date_str, "%Y-%m-%d")
+                    d2 = datetime.strptime(i_date_str, "%Y-%m-%d")
+                    days_diff = abs((d1 - d2).days)
+                    if days_diff > 5: continue
+                except: continue
+                
+                # 3. Supplier Fuzzy Check (Slowest)
+                s1 = (p.supplier or "").upper()
+                s2 = (i.supplier or "").upper()
+                
+                # Pre-filter: Same first letter
+                if s1 and s2 and s1[0] != s2[0]:
+                    fuzzy_score = 0
+                else:
+                    fuzzy_score = fuzz.ratio(s1, s2)
+                
+                # Golden Rule Threshold
+                if fuzzy_score > 85:
+                    if fuzzy_score > best_score:
+                        best_score = fuzzy_score
+                        best_candidate = i
+            
+            if best_candidate:
+                # Create Island
+                i = best_candidate
+                used_invoice_ids.add(i.id)
+                
+                island = TransactionIsland(
+                    nodes=[p, i],
+                    total_value=max(p.amount_cents, i.amount_cents),
+                    is_complete=True,
+                    within_tolerance=(abs(p.amount_cents - i.amount_cents) > 0),
+                    difference=p.amount_cents - i.amount_cents,
+                    total_debits=p.amount_cents,
+                    total_credits=i.amount_cents,
+                    master_date=p.payment_date
+                )
+                matched_islands.append(island)
+                
+        return matched_islands
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

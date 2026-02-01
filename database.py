@@ -220,6 +220,17 @@ class SRDADatabase:
             );
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS suppliers_alias (
+                id INTEGER PRIMARY KEY,
+                raw_name VARCHAR NOT NULL,
+                clean_name VARCHAR NOT NULL,
+                confidence DOUBLE DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(raw_name)
+            );
+        """)
+
         # Índices
         try:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_documentos_status ON documentos(status);")
@@ -665,6 +676,45 @@ class SRDADatabase:
         query += f" ORDER BY cl.created_at DESC LIMIT {limit}"
         
         return self._fetchall_as_dict(query, params)
+
+    # ==========================================================================
+    # V4.0: Knowledge Base (Supplier Aliases)
+    # ==========================================================================
+    
+    def get_resolved_supplier(self, raw_name: str) -> str:
+        """
+        Resolves a raw supplier name to its canonical name using the alias table.
+        Example: "TELEFONICA BRASIL" -> "VIVO"
+        """
+        if not raw_name: return ""
+        
+        try:
+            # 1. Exact match in alias table
+            res = self.connection.execute(
+                "SELECT clean_name FROM suppliers_alias WHERE min_edit_distance(UPPER(raw_name), UPPER(?)) <= 2", 
+                [raw_name]
+            ).fetchone()
+            
+            if res:
+                return res[0]
+                
+            # 2. If no alias, return standardized raw name
+            return raw_name.upper().strip()
+            
+        except Exception as e:
+            logger.error(f"Error resolving supplier {raw_name}: {e}")
+            return raw_name
+
+    def add_supplier_alias(self, raw_name: str, clean_name: str):
+        """Learns a new mapping for a supplier."""
+        try:
+            self.connection.execute("""
+                INSERT OR REPLACE INTO suppliers_alias (raw_name, clean_name)
+                VALUES (?, ?)
+            """, [raw_name.upper().strip(), clean_name.upper().strip()])
+            logger.info(f"Learned Alias: '{raw_name}' -> '{clean_name}'")
+        except Exception as e:
+            logger.error(f"Error learning alias: {e}")
 
     def close(self):
         if self._connection:

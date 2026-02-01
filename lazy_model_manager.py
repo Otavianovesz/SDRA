@@ -226,6 +226,10 @@ class LazyModelManager:
 
     def load_surya(self) -> Optional[Any]:
         """Load Surya OCR Voter."""
+        # 1. Check if permanently disabled
+        if getattr(self, "_surya_disabled", False):
+            return None
+            
         if "surya" in self._active_models:
             return self._active_models["surya"]
             
@@ -246,14 +250,16 @@ class LazyModelManager:
                 model._load_models()
             
             if not model.is_available():
-                logger.warning("Surya OCR unavailable (dependencies missing)")
+                logger.warning("Surya OCR unavailable (dependencies missing) - Disabling permanently for this session")
+                self._surya_disabled = True
                 return None
                 
             self._active_models["surya"] = model
             return model
         except Exception as e:
             # Downgrade to warning to not scare user
-            logger.warning(f"Surya OCR disabled: {e}")
+            logger.warning(f"Surya OCR disabled: {e} - Disabling permanently for this session")
+            self._surya_disabled = True
             return None
     
     def load_paddle(self) -> Optional[Any]:
